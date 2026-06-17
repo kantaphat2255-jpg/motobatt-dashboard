@@ -28,8 +28,8 @@ async function fetchSheetsRaw(): Promise<SheetRawData> {
     throw new Error('กรุณาตั้งค่า GOOGLE_SHEETS_API_KEY และ GOOGLE_SHEETS_SPREADSHEET_ID ใน .env.local');
   }
 
-  const dataRange = process.env.GOOGLE_SHEETS_DATA_RANGE || 'DATA!A:S';
-  const dealerRange = process.env.GOOGLE_SHEETS_DEALER_RANGE || 'รายชื่อลูกค้าทั้งหมด!A:C';
+  const dataRange = (process.env.GOOGLE_SHEETS_DATA_RANGE || 'DATA!A:S').trim();
+  const dealerRange = (process.env.GOOGLE_SHEETS_DEALER_RANGE || 'รายชื่อลูกค้าทั้งหมด!A:C').trim();
 
   const [dataRows, dealerRows] = await Promise.all([
     fetchRange(spreadsheetId, dataRange, apiKey),
