@@ -1,0 +1,18 @@
+{
+  "/api/analytics/dealer-rfm/route": "/api/analytics/dealer-rfm",
+  "/api/analytics/month-compare/route": "/api/analytics/month-compare",
+  "/api/analytics/purchase-cycle/route": "/api/analytics/purchase-cycle",
+  "/api/analytics/returns/route": "/api/analytics/returns",
+  "/api/data/route": "/api/data",
+  "/_not-found/page": "/_not-found",
+  "/dealer-health/page": "/dealer-health",
+  "/month-compare/page": "/month-compare",
+  "/dealer-rfm/page": "/dealer-rfm",
+  "/page": "/",
+  "/overview/page": "/overview",
+  "/returns/page": "/returns",
+  "/tier/page": "/tier",
+  "/trend/page": "/trend",
+  "/purchase-cycle/page": "/purchase-cycle",
+  "/sku/page": "/sku"
+}
