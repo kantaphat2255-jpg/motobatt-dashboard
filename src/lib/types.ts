@@ -41,11 +41,15 @@ export interface DataMeta {
   tierJoinFailCount: number;
   tierJoinFailIds: string[];
   availableMonths: string[];
+  minDate: string;
+  maxDate: string;
+  rangeFrom: string;
+  rangeTo: string;
 }
 
 export interface MonthlyOverviewData {
-  fromMonth: string;
-  toMonth: string;
+  fromDate: string;
+  toDate: string;
   mtdSales: number;
   target: number | null;
   achievementPct: number | null;
@@ -56,7 +60,7 @@ export interface MonthlyOverviewData {
   prevMonthSales: number;
   projectedMonthEnd: number;
   requiredDailyOrGap: number;
-  isCurrentMonth: boolean;
+  isOngoing: boolean;
   daysElapsed: number;
   daysTotal: number;
   daysRemaining: number;
@@ -154,6 +158,8 @@ export interface TrendData {
 export interface DashboardApiResponse {
   meta: DataMeta;
   overview: MonthlyOverviewData;
+  overviewCompare: MonthlyOverviewData | null;
+  compareRange: { from: string; to: string } | null;
   tierAnalysis: TierAnalysisData;
   skuBreakdown: SkuBreakdownData;
   dealerHealth: DealerHealthData;
@@ -164,6 +170,8 @@ export interface DashboardApiResponse {
 export interface AnalyticsMeta {
   fetchedAt: string;
   availableMonths: string[];
+  minDate?: string;
+  maxDate?: string;
 }
 
 // --- Month Compare ---

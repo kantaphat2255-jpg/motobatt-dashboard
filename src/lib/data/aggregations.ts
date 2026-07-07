@@ -11,68 +11,94 @@ import {
   MONTHLY_TARGETS, ORDER_SIZE_RANGES, CUMULATIVE_APR_DEC_2026_TARGET, CUMULATIVE_START_YYYYMM,
 } from '../constants';
 import {
-  getBangkokDate, getCurrentMonthYYYYMM, getDaysInMonth,
-  getPrevMonth, getMonthStartEnd, parseDate, formatMonthLabel, shiftMonths,
+  getBangkokDate, parseDate, formatMonthLabel,
 } from '../utils';
+import {
+  addDaysISO, diffDaysISO, startOfMonthISO, endOfMonthISO, isoToYYYYMM, addMonthsPreserveDay,
+} from '../dateRange';
+
+/**
+ * Sum monthly targets across [from, to], prorating partial months by
+ * (days-in-range within that month / days in month). A whole month yields its
+ * full target, so selecting a complete month matches the legacy behaviour.
+ */
+function proratedTarget(from: string, to: string): number | null {
+  let total = 0;
+  let any = false;
+  let cursor = startOfMonthISO(from);
+  while (cursor <= to) {
+    const mStart = cursor;
+    const mEnd = endOfMonthISO(cursor);
+    const t = MONTHLY_TARGETS[isoToYYYYMM(mStart)];
+    const overlapStart = from > mStart ? from : mStart;
+    const overlapEnd = to < mEnd ? to : mEnd;
+    if (t != null && overlapEnd >= overlapStart) {
+      const daysInMonth = diffDaysISO(mStart, mEnd) + 1;
+      const overlapDays = diffDaysISO(overlapStart, overlapEnd) + 1;
+      total += t * (overlapDays / daysInMonth);
+      any = true;
+    }
+    cursor = addDaysISO(mEnd, 1);
+  }
+  return any ? total : null;
+}
 
 export function aggregateMonthlyOverview(
   rows: NormalizedRow[],
-  from: string,
-  to: string
+  from: string,      // 'YYYY-MM-DD'
+  to: string,        // 'YYYY-MM-DD'
+  maxDate: string,   // latest INV_DATE available in the data
 ): MonthlyOverviewData {
-  const currentMonth = getCurrentMonthYYYYMM();
-  const isSingleMonth = from === to;
-  const isCurrentMonth = isSingleMonth && to === currentMonth;
-
-  // Enumerate months in range
-  const monthsInRange: string[] = [];
-  let m = from;
-  while (m <= to) { monthsInRange.push(m); m = shiftMonths(m, 1); }
-
-  const rangeRows = rows.filter(r => r.YYYYMM >= from && r.YYYYMM <= to);
+  const rangeRows = rows.filter(r => r.INV_DATE >= from && r.INV_DATE <= to);
   const mtdSales = rangeRows.reduce((s, r) => s + r.NET_AMOUNT, 0);
   const mtdUnits = rangeRows.reduce((s, r) => s + r.QTY, 0);
   const mtdCases = rangeRows.reduce((s, r) => s + r.cases, 0);
   const activeDealers = new Set(rangeRows.map(r => r.CUSTOMER_ID)).size;
 
-  // Target: sum over range
-  const target = monthsInRange.some(mo => MONTHLY_TARGETS[mo] != null)
-    ? monthsInRange.reduce((s, mo) => s + (MONTHLY_TARGETS[mo] ?? 0), 0)
-    : null;
+  // "Ongoing" = range sits inside a single month, runs up to the newest data,
+  // and that month isn't over yet → project to month end (legacy MTD behaviour).
+  const sameMonth = from.slice(0, 7) === to.slice(0, 7);
+  const projectionEnd = endOfMonthISO(to);
+  const isOngoing = sameMonth && to === maxDate && to < projectionEnd;
+
+  // Target: full period target when ongoing (progress-to-target), else the
+  // prorated target for the exact range selected.
+  const target = isOngoing ? proratedTarget(from, projectionEnd) : proratedTarget(from, to);
   const achievementPct = target ? (mtdSales / target) * 100 : null;
 
-  // Previous period: same number of months shifted back
-  const nMonths = monthsInRange.length;
-  const prevTo = shiftMonths(from, -1);
-  const prevFrom = shiftMonths(from, -nMonths);
+  // Previous period: the same dates one month earlier (month-over-month).
+  const prevFrom = addMonthsPreserveDay(from, -1);
+  const prevTo = addMonthsPreserveDay(to, -1);
   const prevMonthSales = rows
-    .filter(r => r.YYYYMM >= prevFrom && r.YYYYMM <= prevTo)
+    .filter(r => r.INV_DATE >= prevFrom && r.INV_DATE <= prevTo)
     .reduce((s, r) => s + r.NET_AMOUNT, 0);
   const momPct = prevMonthSales > 0 ? ((mtdSales - prevMonthSales) / prevMonthSales) * 100 : null;
 
-  // Days: only meaningful for single-month
-  const daysTotal = isSingleMonth ? getDaysInMonth(to) : 0;
-  const daysElapsed = isCurrentMonth ? getBangkokDate().getDate() : daysTotal;
-  const daysRemaining = Math.max(0, daysTotal - daysElapsed);
-
-  let projectedMonthEnd: number;
-  let requiredDailyOrGap: number;
-  if (isCurrentMonth && daysElapsed > 0) {
-    projectedMonthEnd = (mtdSales / daysElapsed) * daysTotal;
-    const singleTarget = MONTHLY_TARGETS[to] ?? null;
-    requiredDailyOrGap = singleTarget && daysRemaining > 0 ? (singleTarget - mtdSales) / daysRemaining : 0;
+  const elapsed = diffDaysISO(from, to) + 1;
+  let daysTotal: number, daysElapsed: number, daysRemaining: number;
+  let projectedMonthEnd: number, requiredDailyOrGap: number;
+  if (isOngoing) {
+    const full = diffDaysISO(from, projectionEnd) + 1;
+    daysElapsed = elapsed;
+    daysTotal = full;
+    daysRemaining = Math.max(0, full - elapsed);
+    projectedMonthEnd = elapsed > 0 ? (mtdSales / elapsed) * full : mtdSales;
+    requiredDailyOrGap = target && daysRemaining > 0 ? (target - mtdSales) / daysRemaining : 0;
   } else {
+    daysElapsed = elapsed;
+    daysTotal = elapsed;
+    daysRemaining = 0;
     projectedMonthEnd = mtdSales;
     requiredDailyOrGap = target ? mtdSales - target : 0;
   }
 
   return {
-    fromMonth: from, toMonth: to,
+    fromDate: from, toDate: to,
     mtdSales, target, achievementPct,
     mtdUnits, mtdCases, activeDealers,
     momPct, prevMonthSales,
     projectedMonthEnd, requiredDailyOrGap,
-    isCurrentMonth, daysElapsed, daysTotal, daysRemaining,
+    isOngoing, daysElapsed, daysTotal, daysRemaining,
   };
 }
 
@@ -81,7 +107,7 @@ export function aggregateTierAnalysis(
   from: string,
   to: string
 ): TierAnalysisData {
-  const monthRows = rows.filter(r => r.YYYYMM >= from && r.YYYYMM <= to);
+  const monthRows = rows.filter(r => r.INV_DATE >= from && r.INV_DATE <= to);
   const totalSales = monthRows.reduce((s, r) => s + r.NET_AMOUNT, 0);
 
   const tierMap = new Map<Tier, { sales: number; dealers: Set<string> }>();
@@ -161,14 +187,11 @@ export function aggregateSkuBreakdown(
   from: string,
   to: string
 ): SkuBreakdownData {
-  const monthRows = rows.filter(r => r.YYYYMM >= from && r.YYYYMM <= to);
-  // Previous period: same number of months
-  const monthsInRange: string[] = [];
-  let m = from;
-  while (m <= to) { monthsInRange.push(m); m = shiftMonths(m, 1); }
-  const prevTo = shiftMonths(from, -1);
-  const prevFrom = shiftMonths(from, -monthsInRange.length);
-  const prevRows = rows.filter(r => r.YYYYMM >= prevFrom && r.YYYYMM <= prevTo);
+  const monthRows = rows.filter(r => r.INV_DATE >= from && r.INV_DATE <= to);
+  // Previous period: the same dates one month earlier (month-over-month)
+  const prevFrom = addMonthsPreserveDay(from, -1);
+  const prevTo = addMonthsPreserveDay(to, -1);
+  const prevRows = rows.filter(r => r.INV_DATE >= prevFrom && r.INV_DATE <= prevTo);
   const totalSales = monthRows.reduce((s, r) => s + r.NET_AMOUNT, 0);
 
   const skuMap = new Map<string, { desc: string; sales: number; units: number; cases: number }>();
@@ -216,11 +239,11 @@ export function aggregateDealerHealth(
   from: string,
   to: string
 ): DealerHealthData {
-  const { start: monthStart } = getMonthStartEnd(from);
-  const { end: monthEnd } = getMonthStartEnd(to);
-  const prevMonth = getPrevMonth(from);
+  // Window bounds as UTC-midnight Dates (INV_DATE is ISO, parseDate uses new Date()).
+  const monthStart = new Date(from);
+  const monthEnd = new Date(to);
 
-  const monthRows = filteredRows.filter(r => r.YYYYMM >= from && r.YYYYMM <= to);
+  const monthRows = filteredRows.filter(r => r.INV_DATE >= from && r.INV_DATE <= to);
   const activeDealers = new Set(monthRows.map(r => r.CUSTOMER_ID));
 
   // New: earliest ever INV_DATE (battery+domestic all history) falls in range
@@ -237,8 +260,12 @@ export function aggregateDealerHealth(
     if (firstDate >= monthStart && firstDate <= monthEnd) newDealerIds.add(cid);
   }
 
-  // Returning: active + no invoice in prev month + not new
-  const prevMonthDealers = new Set(filteredRows.filter(r => r.YYYYMM === prevMonth).map((r: NormalizedRow) => r.CUSTOMER_ID));
+  // Returning: active + no invoice in the same dates one month earlier + not new
+  const prevFrom = addMonthsPreserveDay(from, -1);
+  const prevTo = addMonthsPreserveDay(to, -1);
+  const prevMonthDealers = new Set(
+    filteredRows.filter(r => r.INV_DATE >= prevFrom && r.INV_DATE <= prevTo).map((r: NormalizedRow) => r.CUSTOMER_ID)
+  );
   const returningDealers = new Set<string>();
   for (const cid of activeDealers) {
     if (!newDealerIds.has(cid) && !prevMonthDealers.has(cid)) returningDealers.add(cid);

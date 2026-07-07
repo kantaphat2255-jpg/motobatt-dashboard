@@ -4,17 +4,16 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { Suspense } from 'react';
 import { useDashboard } from '@/hooks/useDashboard';
 import DataFreshness from '@/components/layout/DataFreshness';
-import MonthSelector from '@/components/ui/MonthSelector';
+import DateRangePicker from '@/components/ui/DateRangePicker';
 import TrendBadge from '@/components/ui/TrendBadge';
-import { formatCurrency, formatNumber, getCurrentMonthYYYYMM } from '@/lib/utils';
+import { formatCurrency, formatNumber } from '@/lib/utils';
 import { Loader2, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react';
 
 function SkuContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const defaultMonth = getCurrentMonthYYYYMM();
-  const from = searchParams.get('from') || searchParams.get('month') || defaultMonth;
-  const to = searchParams.get('to') || searchParams.get('month') || from;
+  const from = searchParams.get('from') || searchParams.get('month') || undefined;
+  const to = searchParams.get('to') || searchParams.get('month') || undefined;
   const { data, loading, error, refresh } = useDashboard(from, to);
 
   if (loading) return <div className="flex items-center justify-center h-64"><Loader2 size={24} className="animate-spin text-[#F5C400]" /><span className="ml-3 text-gray-400">กำลังโหลดข้อมูล...</span></div>;
@@ -28,7 +27,7 @@ function SkuContent() {
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold">สินค้า / SKU</h1>
-          <MonthSelector availableMonths={meta.availableMonths} from={from} to={to} onChange={(f, t) => router.push(`/sku?from=${f}&to=${t}`)} />
+          <DateRangePicker minDate={meta.minDate} maxDate={meta.maxDate} from={meta.rangeFrom} to={meta.rangeTo} onChange={(f, t) => router.push(`/sku?from=${f}&to=${t}`)} />
         </div>
 
         {/* Top 5 */}

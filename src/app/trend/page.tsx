@@ -7,7 +7,7 @@ import SalesVsTargetChart from '@/components/charts/SalesVsTargetChart';
 import TierStackedBar from '@/components/charts/TierStackedBar';
 import ActiveDealersChart from '@/components/charts/ActiveDealersChart';
 import ProgressBar from '@/components/ui/ProgressBar';
-import { formatCurrency, formatCurrencyShort, formatNumber, getCurrentMonthYYYYMM } from '@/lib/utils';
+import { formatCurrency, formatCurrencyShort, formatNumber } from '@/lib/utils';
 import type { TierKnown } from '@/lib/types';
 
 const TIERS: TierKnown[] = ['A', 'B', 'C', 'D'];

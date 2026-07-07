@@ -88,7 +88,7 @@ function DealerRfmContent() {
   return (
     <>
       <DataFreshness
-        meta={{ fetchedAt: meta.fetchedAt, totalRawRows: 0, validRows: 0, invalidRows: 0, latestMonth: latest, tierJoinFailCount: 0, tierJoinFailIds: [], availableMonths: meta.availableMonths }}
+        meta={{ fetchedAt: meta.fetchedAt, totalRawRows: 0, validRows: 0, invalidRows: 0, latestMonth: latest, tierJoinFailCount: 0, tierJoinFailIds: [], availableMonths: meta.availableMonths, minDate: meta.minDate ?? '', maxDate: meta.maxDate ?? '', rangeFrom: '', rangeTo: '' }}
         onRefresh={refresh}
         loading={loading}
       />

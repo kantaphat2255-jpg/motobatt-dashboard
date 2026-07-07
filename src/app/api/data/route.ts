@@ -7,21 +7,29 @@ import {
   aggregateMonthlyOverview, aggregateTierAnalysis,
   aggregateSkuBreakdown, aggregateDealerHealth, aggregateTrend,
 } from '@/lib/data/aggregations';
-import { getCurrentMonthYYYYMM } from '@/lib/utils';
+import { yyyymmToRange, defaultRange } from '@/lib/dateRange';
 import type { DashboardApiResponse } from '@/lib/types';
+
+// Accept either a 'YYYY-MM-DD' date or a legacy 'YYYYMM' month (back-compat links).
+function normalizeDateParam(value: string | null, edge: 'from' | 'to'): string | null {
+  if (!value) return null;
+  if (/^\d{6}$/.test(value)) {
+    const r = yyyymmToRange(value);
+    return edge === 'from' ? r.from : r.to;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+  return null;
+}
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const currentMonth = getCurrentMonthYYYYMM();
-    const from = searchParams.get('from') || searchParams.get('month') || currentMonth;
-    const to = searchParams.get('to') || searchParams.get('month') || currentMonth;
     const forceRefresh = searchParams.get('refresh') === '1';
 
     const rawData = await fetchSheetsData(forceRefresh);
     const fetchedAt = new Date(getCacheTimestamp() ?? Date.now()).toISOString();
 
-    const { rows: parsedRows, invalidCount, totalCount } = normalizeDataRows(rawData.dataRows);
+    const { rows: parsedRows, totalCount } = normalizeDataRows(rawData.dataRows);
     const dealers = normalizeDealerRows(rawData.dealerRows);
 
     const allBatteryDomestic = applyNewDealerFilters(parsedRows);
@@ -30,6 +38,21 @@ export async function GET(req: NextRequest) {
 
     const availableMonths = [...new Set(normalizedRows.map(r => r.YYYYMM))].sort();
     const latestMonth = availableMonths[availableMonths.length - 1] || '';
+
+    // Data day bounds (INV_DATE is ISO, so string min/max works).
+    let minDate = '', maxDate = '';
+    for (const r of normalizedRows) {
+      if (!minDate || r.INV_DATE < minDate) minDate = r.INV_DATE;
+      if (!maxDate || r.INV_DATE > maxDate) maxDate = r.INV_DATE;
+    }
+
+    const def = defaultRange(minDate, maxDate);
+    const from = normalizeDateParam(searchParams.get('from'), 'from') || def.from;
+    const to = normalizeDateParam(searchParams.get('to'), 'to') || def.to;
+
+    const cfrom = normalizeDateParam(searchParams.get('cfrom'), 'from');
+    const cto = normalizeDateParam(searchParams.get('cto'), 'to');
+    const hasCompare = !!(cfrom && cto);
 
     const meta = {
       fetchedAt,
@@ -40,11 +63,17 @@ export async function GET(req: NextRequest) {
       tierJoinFailCount: failedIds.length,
       tierJoinFailIds: failedIds,
       availableMonths,
+      minDate,
+      maxDate,
+      rangeFrom: from,
+      rangeTo: to,
     };
 
     const response: DashboardApiResponse = {
       meta,
-      overview: aggregateMonthlyOverview(normalizedRows, from, to),
+      overview: aggregateMonthlyOverview(normalizedRows, from, to, maxDate),
+      overviewCompare: hasCompare ? aggregateMonthlyOverview(normalizedRows, cfrom!, cto!, maxDate) : null,
+      compareRange: hasCompare ? { from: cfrom!, to: cto! } : null,
       tierAnalysis: aggregateTierAnalysis(normalizedRows, from, to),
       skuBreakdown: aggregateSkuBreakdown(normalizedRows, from, to),
       dealerHealth: aggregateDealerHealth(normalizedRows, allBatteryDomestic, from, to),

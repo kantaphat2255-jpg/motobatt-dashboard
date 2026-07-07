@@ -2,16 +2,28 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import type { DashboardApiResponse } from '@/lib/types';
-import { getCurrentMonthYYYYMM } from '@/lib/utils';
 
 const clientCache = new Map<string, DashboardApiResponse>();
 const clientInflight = new Map<string, Promise<void>>();
 
-export function useDashboard(from?: string, to?: string) {
-  const defaultMonth = getCurrentMonthYYYYMM();
-  const f = from || defaultMonth;
-  const t = to || f;
-  const cacheKey = `${f}__${t}`;
+export function useDashboard(
+  from?: string,
+  to?: string,
+  compareFrom?: string | null,
+  compareTo?: string | null,
+) {
+  const hasCompare = !!(compareFrom && compareTo);
+  const cacheKey = `${from ?? ''}__${to ?? ''}__${hasCompare ? `${compareFrom}_${compareTo}` : ''}`;
+
+  const buildUrl = (refresh: boolean) => {
+    const p = new URLSearchParams();
+    if (from) p.set('from', from);
+    if (to) p.set('to', to);
+    if (hasCompare) { p.set('cfrom', compareFrom!); p.set('cto', compareTo!); }
+    if (refresh) p.set('refresh', '1');
+    const qs = p.toString();
+    return `/api/data${qs ? `?${qs}` : ''}`;
+  };
 
   const [data, setData] = useState<DashboardApiResponse | null>(() => clientCache.get(cacheKey) ?? null);
   const [loading, setLoading] = useState(!clientCache.has(cacheKey));
@@ -26,8 +38,7 @@ export function useDashboard(from?: string, to?: string) {
     if (!refresh && clientInflight.has(cacheKey)) return;
     setLoading(true);
     setError(null);
-    const url = `/api/data?from=${f}&to=${t}${refresh ? '&refresh=1' : ''}`;
-    const p: Promise<void> = fetch(url)
+    const p: Promise<void> = fetch(buildUrl(refresh))
       .then(r => r.json())
       .then((d: DashboardApiResponse & { error?: string }) => {
         if (d.error) throw new Error(d.error);
@@ -37,7 +48,7 @@ export function useDashboard(from?: string, to?: string) {
       .catch(e => setError(e.message || 'เกิดข้อผิดพลาด'))
       .finally(() => { clientInflight.delete(cacheKey); setLoading(false); });
     clientInflight.set(cacheKey, p);
-  }, [cacheKey, f, t]);
+  }, [cacheKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => { load(); }, [load]);
 

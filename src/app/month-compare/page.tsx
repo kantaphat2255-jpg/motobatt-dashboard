@@ -185,7 +185,7 @@ function MonthCompareContent() {
 
   return (
     <>
-      <DataFreshness meta={{ ...meta, totalRawRows: 0, validRows: 0, invalidRows: 0, latestMonth: latest, tierJoinFailCount: 0, tierJoinFailIds: [] }} onRefresh={refresh} loading={loading} />
+      <DataFreshness meta={{ ...meta, totalRawRows: 0, validRows: 0, invalidRows: 0, latestMonth: latest, tierJoinFailCount: 0, tierJoinFailIds: [], minDate: meta.minDate ?? '', maxDate: meta.maxDate ?? '', rangeFrom: '', rangeTo: '' }} onRefresh={refresh} loading={loading} />
       <div className="p-6 space-y-6">
         {/* Header + month pickers */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">

@@ -5,9 +5,9 @@ import { Suspense } from 'react';
 import { useDashboard } from '@/hooks/useDashboard';
 import DataFreshness from '@/components/layout/DataFreshness';
 import WarningBanner from '@/components/ui/WarningBanner';
-import MonthSelector from '@/components/ui/MonthSelector';
+import DateRangePicker from '@/components/ui/DateRangePicker';
 import TierBarChart from '@/components/charts/TierBarChart';
-import { formatCurrency, formatNumber, getCurrentMonthYYYYMM } from '@/lib/utils';
+import { formatCurrency, formatNumber } from '@/lib/utils';
 import { TIER_COLORS, TIER_LABELS } from '@/lib/constants';
 import type { TierKnown } from '@/lib/types';
 import { Loader2, AlertCircle } from 'lucide-react';
@@ -15,9 +15,8 @@ import { Loader2, AlertCircle } from 'lucide-react';
 function TierContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const defaultMonth = getCurrentMonthYYYYMM();
-  const from = searchParams.get('from') || searchParams.get('month') || defaultMonth;
-  const to = searchParams.get('to') || searchParams.get('month') || from;
+  const from = searchParams.get('from') || searchParams.get('month') || undefined;
+  const to = searchParams.get('to') || searchParams.get('month') || undefined;
   const { data, loading, error, refresh } = useDashboard(from, to);
 
   if (loading) return (
@@ -43,7 +42,7 @@ function TierContent() {
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold">วิเคราะห์ระดับชั้น (Tier)</h1>
-          <MonthSelector availableMonths={meta.availableMonths} from={from} to={to} onChange={(f, t) => router.push(`/tier?from=${f}&to=${t}`)} />
+          <DateRangePicker minDate={meta.minDate} maxDate={meta.maxDate} from={meta.rangeFrom} to={meta.rangeTo} onChange={(f, t) => router.push(`/tier?from=${f}&to=${t}`)} />
         </div>
 
         <WarningBanner count={meta.tierJoinFailCount} ids={meta.tierJoinFailIds} />

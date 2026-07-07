@@ -2,8 +2,9 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { Loader2, AlertCircle, RotateCcw } from 'lucide-react';
-import { formatCurrency, formatCurrencyShort, formatNumber, getCurrentMonthYYYYMM } from '@/lib/utils';
-import MonthSelector from '@/components/ui/MonthSelector';
+import { formatCurrency, formatCurrencyShort, formatNumber } from '@/lib/utils';
+import { defaultRange } from '@/lib/dateRange';
+import DateRangePicker from '@/components/ui/DateRangePicker';
 import type { ReturnsApiResponse } from '@/lib/types';
 import type { TierKnown } from '@/lib/types';
 
@@ -31,8 +32,6 @@ function ReturnsContent() {
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
 
-  const availableMonths = data?.meta.availableMonths ?? [];
-
   useEffect(() => {
     setLoading(true);
     const params = from && to ? `?from=${from}&to=${to}` : '';
@@ -40,10 +39,10 @@ function ReturnsContent() {
       .then(r => r.json())
       .then(d => {
         setData(d);
-        if (!from && !to && d?.meta?.availableMonths?.length) {
-          const latest = d.meta.availableMonths[d.meta.availableMonths.length - 1];
-          setFrom(latest);
-          setTo(latest);
+        if (!from && !to && d?.meta?.minDate && d?.meta?.maxDate) {
+          const def = defaultRange(d.meta.minDate, d.meta.maxDate);
+          setFrom(def.from);
+          setTo(def.to);
         }
         setLoading(false);
       })
@@ -51,7 +50,7 @@ function ReturnsContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from, to]);
 
-  function handleMonthChange(f: string, t: string) {
+  function handleChange(f: string, t: string) {
     setFrom(f);
     setTo(t);
   }
@@ -77,12 +76,13 @@ function ReturnsContent() {
           <RotateCcw size={20} className="text-red-400" />
           คืนสินค้า / เคลม
         </h1>
-        {availableMonths.length > 0 && from && to && (
-          <MonthSelector
-            availableMonths={availableMonths}
+        {data.meta.minDate && data.meta.maxDate && from && to && (
+          <DateRangePicker
+            minDate={data.meta.minDate}
+            maxDate={data.meta.maxDate}
             from={from}
             to={to}
-            onChange={handleMonthChange}
+            onChange={handleChange}
           />
         )}
       </div>
