@@ -14,6 +14,7 @@ export interface RawDataRow {
   CUSTOMER_NAME: string;
   SALE_TYPE: string;
   SALE_TYPE1: string;
+  ZONE_ID: string;
 }
 
 export interface DealerMaster {
@@ -306,4 +307,80 @@ export interface PurchaseCycleRow {
 export interface PurchaseCycleApiResponse {
   meta: AnalyticsMeta;
   dealers: PurchaseCycleRow[];
+}
+
+// --- Dealer Sales ---
+export interface DealerSaleSku {
+  itemId: string;
+  itemDesc: string;
+  qty: number;
+  cases: number;
+  netAmount: number;
+}
+
+export interface DealerSaleRow {
+  customerId: string;
+  customerName: string;
+  tier: TierKnown;
+  totalSales: number;
+  totalUnits: number;
+  totalCases: number;
+  skuCount: number;
+  lastInvoiceDate: string | null;
+  skus: DealerSaleSku[];
+}
+
+export interface DealerSalesSummary {
+  activeDealers: number;
+  totalSales: number;
+  totalUnits: number;
+  totalCases: number;
+  dealerCountByTier: Partial<Record<TierKnown, number>>;
+}
+
+export interface DealerSalesData {
+  summary: DealerSalesSummary;
+  dealers: DealerSaleRow[];
+}
+
+export interface DealerSalesApiResponse {
+  meta: DataMeta;
+  data: DealerSalesData;
+}
+
+// --- Zone Sales ---
+export interface ZoneBreakdownRow {
+  zoneId: string;
+  sales: number;
+  salesPct: number;
+  units: number;
+  cases: number;
+  dealerCount: number;
+  invoiceCount: number;
+}
+
+export interface OnlineChannelRow {
+  zoneId: string;
+  channel: string;
+  sales: number;
+  salesPct: number;
+  units: number;
+  cases: number;
+  orderCount: number;
+  buyerCount: number;
+}
+
+export interface ZoneSalesData {
+  totalSales: number;
+  coreZoneSales: number;
+  onlineSales: number;
+  otherSales: number;
+  onlinePctOfTotal: number;
+  zones: ZoneBreakdownRow[];
+  onlineChannels: OnlineChannelRow[];
+}
+
+export interface ZoneSalesApiResponse {
+  meta: DataMeta;
+  data: ZoneSalesData;
 }

@@ -95,7 +95,7 @@ function TierContent() {
         {/* Order Size Distribution */}
         <div className="bg-[#1C1C1C] border border-[#2A2A2A] rounded-xl p-5">
           <h2 className="text-sm font-semibold text-gray-300 mb-4">
-            การกระจายขนาดคำสั่งซื้อ (เฉลี่ย ลัง/ออเดอร์)
+            การกระจายขนาดการซื้อต่อร้าน (ลังรวมทั้งเดือน)
           </h2>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

@@ -6,9 +6,12 @@ import type {
   MonthCompareData, MonthCompareSummary, DealerMovementRow, DealerMovementGroup, SkuMovementRow,
   DealerRfmRow, CycleStatus, PurchaseCycleRow,
   ReturnMonthData, ReturnSkuRow, ReturnDealerRow,
+  DealerSalesData, DealerSaleRow, DealerSalesSummary,
+  ZoneSalesData, ZoneBreakdownRow, OnlineChannelRow,
 } from '../types';
 import {
   MONTHLY_TARGETS, ORDER_SIZE_RANGES, CUMULATIVE_APR_DEC_2026_TARGET, CUMULATIVE_START_YYYYMM,
+  CORE_ZONES, ONLINE_ZONE_LABELS,
 } from '../constants';
 import {
   getBangkokDate, parseDate, formatMonthLabel,
@@ -132,43 +135,33 @@ export function aggregateTierAnalysis(
       };
     });
 
-  // Order size distribution: average cases per invoice per dealer (known tiers only)
-  const dealerData = new Map<string, { tier: TierKnown; totalCases: number; invCount: number }>();
-  const invCasesMap = new Map<string, number>(); // invKey -> cases
-
+  // Order size distribution: total cases each dealer bought this period (known tiers only).
+  // We group dealers by their monthly volume (e.g. a dealer with 40 cases across 6
+  // orders counts as "40 ลัง", not by average order size).
+  const dealerVolume = new Map<string, { tier: TierKnown; totalCases: number }>();
   for (const r of monthRows) {
     if (!['A', 'B', 'C', 'D'].includes(r.Tier)) continue;
     const tier = r.Tier as TierKnown;
-    const invKey = `${r.CUSTOMER_ID}::${r.INV_NO}`;
-
-    if (!dealerData.has(r.CUSTOMER_ID)) {
-      dealerData.set(r.CUSTOMER_ID, { tier, totalCases: 0, invCount: 0 });
+    if (!dealerVolume.has(r.CUSTOMER_ID)) {
+      dealerVolume.set(r.CUSTOMER_ID, { tier, totalCases: 0 });
     }
-    dealerData.get(r.CUSTOMER_ID)!.totalCases += r.cases;
-
-    if (!invCasesMap.has(invKey)) {
-      invCasesMap.set(invKey, 0);
-      dealerData.get(r.CUSTOMER_ID)!.invCount++;
-    }
-    invCasesMap.set(invKey, (invCasesMap.get(invKey) || 0) + r.cases);
-  }
-
-  // Average order size per dealer
-  const dealerAvg = new Map<string, { tier: TierKnown; avgCases: number }>();
-  for (const [cid, { tier, totalCases, invCount }] of dealerData) {
-    dealerAvg.set(cid, { tier, avgCases: invCount > 0 ? totalCases / invCount : 0 });
+    dealerVolume.get(r.CUSTOMER_ID)!.totalCases += r.cases;
   }
 
   // Tier totals for % calculation
   const tierTotals = new Map<TierKnown, number>();
-  for (const { tier } of dealerAvg.values()) {
+  for (const { tier } of dealerVolume.values()) {
     tierTotals.set(tier, (tierTotals.get(tier) || 0) + 1);
   }
 
   const orderSizeDistribution: OrderSizeRow[] = ORDER_SIZE_RANGES.map(range => {
     const counts: Partial<Record<TierKnown, number>> = {};
-    for (const { tier, avgCases } of dealerAvg.values()) {
-      if (avgCases >= range.min && avgCases <= range.max) {
+    for (const { tier, totalCases } of dealerVolume.values()) {
+      // Round to the nearest whole case so fractional totals (e.g. 40.1) still land
+      // in a bucket — otherwise a dealer falls through the integer rows and the
+      // per-tier column stops summing to 100%.
+      const rounded = Math.round(totalCases);
+      if (rounded >= range.min && rounded <= range.max) {
         counts[tier] = (counts[tier] || 0) + 1;
       }
     }
@@ -787,4 +780,146 @@ export function aggregateReturns(
   const overallReturnRate = totalGrossSales > 0 ? (totalReturnAmount / totalGrossSales) * 100 : 0;
 
   return { months, topReturnedSkus, topReturningDealers, totalReturnAmount, totalGrossSales, overallReturnRate };
+}
+
+// Dealer-level sales with per-SKU breakdown, restricted to known tiers A/B/C
+// (Tier D and Unknown are excluded from this view entirely).
+export function aggregateDealerSales(
+  rows: NormalizedRow[],
+  from: string,
+  to: string
+): DealerSalesData {
+  const monthRows = rows.filter(r =>
+    r.INV_DATE >= from && r.INV_DATE <= to &&
+    (r.Tier === 'A' || r.Tier === 'B' || r.Tier === 'C')
+  );
+
+  const dealerMap = new Map<string, {
+    name: string; tier: TierKnown;
+    sales: number; units: number; cases: number;
+    lastDate: string | null;
+    skuMap: Map<string, { desc: string; qty: number; cases: number; net: number }>;
+  }>();
+
+  for (const r of monthRows) {
+    if (!dealerMap.has(r.CUSTOMER_ID)) {
+      dealerMap.set(r.CUSTOMER_ID, {
+        name: r.CUSTOMER_NAME, tier: r.Tier as TierKnown,
+        sales: 0, units: 0, cases: 0, lastDate: null,
+        skuMap: new Map(),
+      });
+    }
+    const d = dealerMap.get(r.CUSTOMER_ID)!;
+    d.sales += r.NET_AMOUNT;
+    d.units += r.QTY;
+    d.cases += r.cases;
+    if (!d.lastDate || r.INV_DATE > d.lastDate) d.lastDate = r.INV_DATE;
+
+    const sku = d.skuMap.get(r.ITEM_ID);
+    if (sku) {
+      sku.qty += r.QTY;
+      sku.cases += r.cases;
+      sku.net += r.NET_AMOUNT;
+    } else {
+      d.skuMap.set(r.ITEM_ID, { desc: r.ITEM_DESC, qty: r.QTY, cases: r.cases, net: r.NET_AMOUNT });
+    }
+  }
+
+  const dealers: DealerSaleRow[] = Array.from(dealerMap.entries())
+    .map(([customerId, d]) => ({
+      customerId,
+      customerName: d.name,
+      tier: d.tier,
+      totalSales: d.sales,
+      totalUnits: d.units,
+      totalCases: d.cases,
+      skuCount: d.skuMap.size,
+      lastInvoiceDate: d.lastDate,
+      skus: Array.from(d.skuMap.entries())
+        .map(([itemId, s]) => ({ itemId, itemDesc: s.desc, qty: s.qty, cases: s.cases, netAmount: s.net }))
+        .sort((a, b) => b.netAmount - a.netAmount),
+    }))
+    .sort((a, b) => b.totalSales - a.totalSales);
+
+  const dealerCountByTier: Partial<Record<TierKnown, number>> = {};
+  for (const d of dealers) {
+    dealerCountByTier[d.tier] = (dealerCountByTier[d.tier] || 0) + 1;
+  }
+
+  const summary: DealerSalesSummary = {
+    activeDealers: dealers.length,
+    totalSales: dealers.reduce((s, d) => s + d.totalSales, 0),
+    totalUnits: dealers.reduce((s, d) => s + d.totalUnits, 0),
+    totalCases: dealers.reduce((s, d) => s + d.totalCases, 0),
+    dealerCountByTier,
+  };
+
+  return { summary, dealers };
+}
+
+// Sales broken down by ZONE_ID: core dealer zones the user manages directly,
+// vs. online marketplace channels (Lazada/Shopee/TikTok), vs. everything else
+// (other teams' territory, unmapped zones).
+export function aggregateZoneSales(
+  rows: NormalizedRow[],
+  from: string,
+  to: string
+): ZoneSalesData {
+  const monthRows = rows.filter(r => r.INV_DATE >= from && r.INV_DATE <= to);
+  const totalSales = monthRows.reduce((s, r) => s + r.NET_AMOUNT, 0);
+
+  const zoneMap = new Map<string, { sales: number; units: number; cases: number; dealers: Set<string>; invoices: Set<string> }>();
+  for (const r of monthRows) {
+    const zone = r.ZONE_ID;
+    if (!zoneMap.has(zone)) zoneMap.set(zone, { sales: 0, units: 0, cases: 0, dealers: new Set(), invoices: new Set() });
+    const z = zoneMap.get(zone)!;
+    z.sales += r.NET_AMOUNT;
+    z.units += r.QTY;
+    z.cases += r.cases;
+    z.dealers.add(r.CUSTOMER_ID);
+    z.invoices.add(r.INV_NO);
+  }
+
+  const zones: ZoneBreakdownRow[] = CORE_ZONES
+    .filter(z => zoneMap.has(z))
+    .map(z => {
+      const d = zoneMap.get(z)!;
+      return {
+        zoneId: z,
+        sales: d.sales,
+        salesPct: totalSales > 0 ? (d.sales / totalSales) * 100 : 0,
+        units: d.units,
+        cases: d.cases,
+        dealerCount: d.dealers.size,
+        invoiceCount: d.invoices.size,
+      };
+    })
+    .sort((a, b) => b.sales - a.sales);
+
+  const onlineChannels: OnlineChannelRow[] = Object.entries(ONLINE_ZONE_LABELS)
+    .filter(([z]) => zoneMap.has(z))
+    .map(([z, channel]) => {
+      const d = zoneMap.get(z)!;
+      return {
+        zoneId: z,
+        channel,
+        sales: d.sales,
+        salesPct: totalSales > 0 ? (d.sales / totalSales) * 100 : 0,
+        units: d.units,
+        cases: d.cases,
+        orderCount: d.invoices.size,
+        buyerCount: d.dealers.size,
+      };
+    })
+    .sort((a, b) => b.sales - a.sales);
+
+  const coreZoneSales = zones.reduce((s, z) => s + z.sales, 0);
+  const onlineSales = onlineChannels.reduce((s, c) => s + c.sales, 0);
+  const otherSales = totalSales - coreZoneSales - onlineSales;
+
+  return {
+    totalSales, coreZoneSales, onlineSales, otherSales,
+    onlinePctOfTotal: totalSales > 0 ? (onlineSales / totalSales) * 100 : 0,
+    zones, onlineChannels,
+  };
 }

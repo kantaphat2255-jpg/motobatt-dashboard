@@ -67,6 +67,7 @@ export function normalizeDataRows(rawRows: string[][]): {
       CUSTOMER_NAME: get('CUSTOMER_NAME'),
       SALE_TYPE: get('SALE_TYPE'),
       SALE_TYPE1: get('SALE_TYPE1'),
+      ZONE_ID: get('ZONE_ID'),
     });
   }
 

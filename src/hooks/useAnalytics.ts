@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { MonthCompareApiResponse, DealerRfmApiResponse, PurchaseCycleApiResponse } from '@/lib/types';
+import type { MonthCompareApiResponse, DealerRfmApiResponse, PurchaseCycleApiResponse, DealerSalesApiResponse, ZoneSalesApiResponse } from '@/lib/types';
 
 const compareCache = new Map<string, MonthCompareApiResponse>();
 const compareInflight = new Map<string, Promise<void>>();
@@ -9,6 +9,10 @@ let rfmCache: DealerRfmApiResponse | null = null;
 let rfmInflight = false;
 let cycleCache: PurchaseCycleApiResponse | null = null;
 let cycleInflight = false;
+const dealerSalesCache = new Map<string, DealerSalesApiResponse>();
+const dealerSalesInflight = new Map<string, Promise<void>>();
+const zoneSalesCache = new Map<string, ZoneSalesApiResponse>();
+const zoneSalesInflight = new Map<string, Promise<void>>();
 
 export function useMonthCompare(base: string, compare: string) {
   const cacheKey = `${base}__${compare}`;
@@ -115,6 +119,100 @@ export function usePurchaseCycle() {
     cycleCache = null;
     load(true);
   }, [load]);
+
+  return { data, loading, error, refresh };
+}
+
+export function useDealerSales(from?: string, to?: string) {
+  const cacheKey = `${from ?? ''}__${to ?? ''}`;
+
+  const buildUrl = (refresh: boolean) => {
+    const p = new URLSearchParams();
+    if (from) p.set('from', from);
+    if (to) p.set('to', to);
+    if (refresh) p.set('refresh', '1');
+    const qs = p.toString();
+    return `/api/analytics/dealer-sales${qs ? `?${qs}` : ''}`;
+  };
+
+  const [data, setData] = useState<DealerSalesApiResponse | null>(() => dealerSalesCache.get(cacheKey) ?? null);
+  const [loading, setLoading] = useState(!dealerSalesCache.has(cacheKey));
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback((refresh = false) => {
+    if (!refresh && dealerSalesCache.has(cacheKey)) {
+      setData(dealerSalesCache.get(cacheKey)!);
+      setLoading(false);
+      return;
+    }
+    if (!refresh && dealerSalesInflight.has(cacheKey)) return;
+    setLoading(true);
+    setError(null);
+    const p: Promise<void> = fetch(buildUrl(refresh))
+      .then(r => r.json())
+      .then((d: DealerSalesApiResponse & { error?: string }) => {
+        if (d.error) throw new Error(d.error);
+        dealerSalesCache.set(cacheKey, d);
+        setData(d);
+      })
+      .catch(e => setError(e.message || 'เกิดข้อผิดพลาด'))
+      .finally(() => { dealerSalesInflight.delete(cacheKey); setLoading(false); });
+    dealerSalesInflight.set(cacheKey, p);
+  }, [cacheKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { load(); }, [load]);
+
+  const refresh = useCallback(() => {
+    dealerSalesCache.delete(cacheKey);
+    load(true);
+  }, [cacheKey, load]);
+
+  return { data, loading, error, refresh };
+}
+
+export function useZoneSales(from?: string, to?: string) {
+  const cacheKey = `${from ?? ''}__${to ?? ''}`;
+
+  const buildUrl = (refresh: boolean) => {
+    const p = new URLSearchParams();
+    if (from) p.set('from', from);
+    if (to) p.set('to', to);
+    if (refresh) p.set('refresh', '1');
+    const qs = p.toString();
+    return `/api/analytics/zone-sales${qs ? `?${qs}` : ''}`;
+  };
+
+  const [data, setData] = useState<ZoneSalesApiResponse | null>(() => zoneSalesCache.get(cacheKey) ?? null);
+  const [loading, setLoading] = useState(!zoneSalesCache.has(cacheKey));
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback((refresh = false) => {
+    if (!refresh && zoneSalesCache.has(cacheKey)) {
+      setData(zoneSalesCache.get(cacheKey)!);
+      setLoading(false);
+      return;
+    }
+    if (!refresh && zoneSalesInflight.has(cacheKey)) return;
+    setLoading(true);
+    setError(null);
+    const p: Promise<void> = fetch(buildUrl(refresh))
+      .then(r => r.json())
+      .then((d: ZoneSalesApiResponse & { error?: string }) => {
+        if (d.error) throw new Error(d.error);
+        zoneSalesCache.set(cacheKey, d);
+        setData(d);
+      })
+      .catch(e => setError(e.message || 'เกิดข้อผิดพลาด'))
+      .finally(() => { zoneSalesInflight.delete(cacheKey); setLoading(false); });
+    zoneSalesInflight.set(cacheKey, p);
+  }, [cacheKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { load(); }, [load]);
+
+  const refresh = useCallback(() => {
+    zoneSalesCache.delete(cacheKey);
+    load(true);
+  }, [cacheKey, load]);
 
   return { data, loading, error, refresh };
 }

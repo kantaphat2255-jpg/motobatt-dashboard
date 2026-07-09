@@ -30,6 +30,7 @@ export const THAI_MONTHS_FULL = [
 ];
 
 export const ORDER_SIZE_RANGES = [
+  { label: 'น้อยกว่า 1 ลัง', min: 0, max: 0 },
   ...Array.from({ length: 50 }, (_, i) => ({ label: `${i + 1} ลัง`, min: i + 1, max: i + 1 })),
   { label: '51-60 ลัง', min: 51, max: 60 },
   { label: '61-70 ลัง', min: 61, max: 70 },
@@ -52,4 +53,22 @@ export const TIER_LABELS: Record<string, string> = {
   C: 'เทียร์ C',
   D: 'เทียร์ D',
   Unknown: 'ไม่ระบุเทียร์',
+};
+
+// ZONE_ID mapping — core dealer zones this user manages directly.
+// 40-70 is another team's territory (not tracked here). Confirmed against live data.
+export const CORE_ZONES = ['01', '02', '03', '04', '05', '06', '07', '11', '12', '13'];
+
+// Online marketplace channels. The sheet's own AREA_SUP column is stale for 80-03
+// (still shows "Other" instead of "Tiktok") — this mapping is the source of truth.
+export const ONLINE_ZONE_LABELS: Record<string, string> = {
+  '80-01': 'Lazada',
+  '80-02': 'Shopee',
+  '80-03': 'TikTok',
+};
+
+export const ONLINE_CHANNEL_COLORS: Record<string, string> = {
+  Lazada: '#F97316',
+  Shopee: '#F43F5E',
+  TikTok: '#22D3EE',
 };
