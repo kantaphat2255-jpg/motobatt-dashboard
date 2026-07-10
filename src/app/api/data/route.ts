@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchSheetsData, getCacheTimestamp } from '@/lib/sheets';
 import { normalizeDataRows, normalizeDealerRows } from '@/lib/data/normalize';
-import { applyBaseFilters, applyNewDealerFilters } from '@/lib/data/filters';
+import { applyBaseFilters, applyNewDealerFilters, filterCoreZones } from '@/lib/data/filters';
 import { joinDealerTier } from '@/lib/data/join';
 import {
-  aggregateMonthlyOverview, aggregateTierAnalysis,
+  aggregateMonthlyOverview, aggregateTierAnalysis, aggregateBillSizeDistribution,
   aggregateSkuBreakdown, aggregateDealerHealth, aggregateTrend,
 } from '@/lib/data/aggregations';
 import { yyyymmToRange, defaultRange } from '@/lib/dateRange';
@@ -32,8 +32,8 @@ export async function GET(req: NextRequest) {
     const { rows: parsedRows, totalCount } = normalizeDataRows(rawData.dataRows);
     const dealers = normalizeDealerRows(rawData.dealerRows);
 
-    const allBatteryDomestic = applyNewDealerFilters(parsedRows);
-    const baseFiltered = applyBaseFilters(parsedRows);
+    const allBatteryDomestic = filterCoreZones(applyNewDealerFilters(parsedRows));
+    const baseFiltered = filterCoreZones(applyBaseFilters(parsedRows));
     const { rows: normalizedRows, failedIds } = joinDealerTier(baseFiltered, dealers);
 
     const availableMonths = [...new Set(normalizedRows.map(r => r.YYYYMM))].sort();
@@ -75,6 +75,7 @@ export async function GET(req: NextRequest) {
       overviewCompare: hasCompare ? aggregateMonthlyOverview(normalizedRows, cfrom!, cto!, maxDate) : null,
       compareRange: hasCompare ? { from: cfrom!, to: cto! } : null,
       tierAnalysis: aggregateTierAnalysis(normalizedRows, from, to),
+      billSizeDistribution: aggregateBillSizeDistribution(normalizedRows, from, to),
       skuBreakdown: aggregateSkuBreakdown(normalizedRows, from, to),
       dealerHealth: aggregateDealerHealth(normalizedRows, allBatteryDomestic, from, to),
       trend: aggregateTrend(normalizedRows),

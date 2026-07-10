@@ -72,3 +72,18 @@ export const ONLINE_CHANNEL_COLORS: Record<string, string> = {
   Shopee: '#F43F5E',
   TikTok: '#22D3EE',
 };
+
+// Zones excluded from every "core business" aggregation (sales, tier, sku,
+// dealer counts, etc.) — online marketplace channels plus the other team's
+// territory. Only the Zone Sales page bypasses this, since its job is to show
+// exactly what's happening in these zones.
+export const EXCLUDED_ZONE_IDS = ['80-01', '80-02', '80-03', '40-70'];
+
+export const BILL_SIZE_RANGES = [
+  { label: 'น้อยกว่า 3,000', min: 0, max: 3000 },
+  { label: '3,000 - 9,999', min: 3000, max: 10000 },
+  { label: '10,000 - 29,999', min: 10000, max: 30000 },
+  { label: '30,000 - 59,999', min: 30000, max: 60000 },
+  { label: '60,000 - 99,999', min: 60000, max: 100000 },
+  { label: '100,000 ขึ้นไป', min: 100000, max: Infinity },
+];

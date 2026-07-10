@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchSheetsData, getCacheTimestamp } from '@/lib/sheets';
 import { normalizeDataRows, normalizeDealerRows } from '@/lib/data/normalize';
-import { applyBaseFilters, applyReturnFilters } from '@/lib/data/filters';
+import { applyBaseFilters, applyReturnFilters, filterCoreZones } from '@/lib/data/filters';
 import { joinDealerTier } from '@/lib/data/join';
 import { aggregateReturns } from '@/lib/data/aggregations';
 import { yyyymmToRange } from '@/lib/dateRange';
@@ -30,8 +30,8 @@ export async function GET(req: NextRequest) {
     const { rows: parsedRows } = normalizeDataRows(rawData.dataRows);
     const dealers = normalizeDealerRows(rawData.dealerRows);
 
-    const salesFiltered = applyBaseFilters(parsedRows);
-    const returnFiltered = applyReturnFilters(parsedRows);
+    const salesFiltered = filterCoreZones(applyBaseFilters(parsedRows));
+    const returnFiltered = filterCoreZones(applyReturnFilters(parsedRows));
 
     const { rows: allSalesRows } = joinDealerTier(salesFiltered, dealers);
     const { rows: allReturnRows } = joinDealerTier(returnFiltered, dealers);

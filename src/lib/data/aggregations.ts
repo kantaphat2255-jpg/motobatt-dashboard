@@ -1,6 +1,7 @@
 import type {
   NormalizedRow, RawDataRow, Tier, TierKnown,
   MonthlyOverviewData, TierAnalysisData, TierSummary, OrderSizeRow,
+  BillSizeDistributionData, BillSizeRow,
   SkuBreakdownData, SkuData, DealerHealthData, DealerInfo,
   TrendData, TrendMonthData,
   MonthCompareData, MonthCompareSummary, DealerMovementRow, DealerMovementGroup, SkuMovementRow,
@@ -10,7 +11,7 @@ import type {
   ZoneSalesData, ZoneBreakdownRow, OnlineChannelRow,
 } from '../types';
 import {
-  MONTHLY_TARGETS, ORDER_SIZE_RANGES, CUMULATIVE_APR_DEC_2026_TARGET, CUMULATIVE_START_YYYYMM,
+  MONTHLY_TARGETS, ORDER_SIZE_RANGES, BILL_SIZE_RANGES, CUMULATIVE_APR_DEC_2026_TARGET, CUMULATIVE_START_YYYYMM,
   CORE_ZONES, ONLINE_ZONE_LABELS,
 } from '../constants';
 import {
@@ -173,6 +174,42 @@ export function aggregateTierAnalysis(
   });
 
   return { tiers, orderSizeDistribution, totalSales };
+}
+
+// Invoice-value ("bill size") distribution — how big a typical order is in ฿,
+// as opposed to orderSizeDistribution above which buckets by case count per
+// dealer for the whole period. Buckets by NET_AMOUNT summed per INV_NO.
+export function aggregateBillSizeDistribution(
+  rows: NormalizedRow[],
+  from: string,
+  to: string
+): BillSizeDistributionData {
+  const monthRows = rows.filter(r => r.INV_DATE >= from && r.INV_DATE <= to);
+
+  const invoiceTotals = new Map<string, number>();
+  for (const r of monthRows) {
+    invoiceTotals.set(r.INV_NO, (invoiceTotals.get(r.INV_NO) ?? 0) + r.NET_AMOUNT);
+  }
+  const invoiceValues = [...invoiceTotals.values()];
+  const totalInvoices = invoiceValues.length;
+  const totalSales = invoiceValues.reduce((s, v) => s + v, 0);
+
+  const buckets: BillSizeRow[] = BILL_SIZE_RANGES.map(range => {
+    const inBucket = invoiceValues.filter(v => v >= range.min && v < range.max);
+    const sales = inBucket.reduce((s, v) => s + v, 0);
+    return {
+      label: range.label,
+      min: range.min,
+      max: range.max,
+      invoiceCount: inBucket.length,
+      invoiceCountPct: totalInvoices > 0 ? (inBucket.length / totalInvoices) * 100 : 0,
+      sales,
+      salesPct: totalSales > 0 ? (sales / totalSales) * 100 : 0,
+      avgPerInvoice: inBucket.length > 0 ? sales / inBucket.length : 0,
+    };
+  });
+
+  return { buckets, totalInvoices, totalSales };
 }
 
 export function aggregateSkuBreakdown(

@@ -32,7 +32,7 @@ function TierContent() {
     </div>
   );
 
-  const { tierAnalysis: ta, meta } = data;
+  const { tierAnalysis: ta, billSizeDistribution: bs, meta } = data;
   const knownTiers = ta.tiers.filter(t => t.tier !== 'Unknown');
   const unknownTier = ta.tiers.find(t => t.tier === 'Unknown');
 
@@ -133,6 +133,42 @@ function TierContent() {
               </tbody>
             </table>
           </div>
+        </div>
+
+        {/* Bill Size Distribution */}
+        <div className="bg-[#1C1C1C] border border-[#2A2A2A] rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-gray-300 mb-4">
+            สัดส่วนขนาดบิล (฿ ต่อบิล) — กำลังซื้อต่อบิล
+          </h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-[#2A2A2A]">
+                  <th className="text-left py-2 pr-4 text-gray-400 font-medium text-xs whitespace-nowrap">ขนาดบิล (฿)</th>
+                  <th className="text-right py-2 px-3 text-gray-400 font-medium text-xs whitespace-nowrap">จำนวนบิล</th>
+                  <th className="text-right py-2 px-3 text-gray-400 font-medium text-xs whitespace-nowrap">ยอดรวม</th>
+                  <th className="text-right py-2 px-3 text-gray-400 font-medium text-xs whitespace-nowrap">% ของยอด</th>
+                  <th className="text-right py-2 pl-3 text-gray-400 font-medium text-xs whitespace-nowrap">เฉลี่ย/บิล</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bs.buckets.map(row => (
+                  <tr key={row.label} className="border-b border-[#1A1A1A] hover:bg-[#242424]">
+                    <td className="py-2 pr-4 text-gray-300 tabular-nums text-xs whitespace-nowrap">฿{row.label}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-xs text-white">
+                      {row.invoiceCount} <span className="text-gray-500">({row.invoiceCountPct.toFixed(1)}%)</span>
+                    </td>
+                    <td className="py-2 px-3 text-right tabular-nums text-xs text-white font-medium">{formatCurrency(row.sales)}</td>
+                    <td className="py-2 px-3 text-right tabular-nums text-xs text-gray-300">{row.salesPct.toFixed(1)}%</td>
+                    <td className="py-2 pl-3 text-right tabular-nums text-xs text-gray-300">{formatCurrency(row.avgPerInvoice)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="text-xs text-gray-500 mt-3">
+            รวม {formatNumber(bs.totalInvoices)} บิล — {formatCurrency(bs.totalSales)}
+          </p>
         </div>
       </div>
     </>

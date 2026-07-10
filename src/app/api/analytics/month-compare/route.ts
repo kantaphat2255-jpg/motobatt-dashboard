@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchSheetsData, getCacheTimestamp } from '@/lib/sheets';
 import { normalizeDataRows, normalizeDealerRows } from '@/lib/data/normalize';
-import { applyBaseFilters } from '@/lib/data/filters';
+import { applyBaseFilters, filterCoreZones } from '@/lib/data/filters';
 import { joinDealerTier } from '@/lib/data/join';
 import { aggregateMonthCompare } from '@/lib/data/aggregations';
 import { getCurrentMonthYYYYMM, shiftMonths } from '@/lib/utils';
@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
 
     const { rows: parsedRows } = normalizeDataRows(rawData.dataRows);
     const dealers = normalizeDealerRows(rawData.dealerRows);
-    const baseFiltered = applyBaseFilters(parsedRows);
+    const baseFiltered = filterCoreZones(applyBaseFilters(parsedRows));
     const { rows: normalizedRows } = joinDealerTier(baseFiltered, dealers);
 
     const availableMonths = [...new Set(normalizedRows.map(r => r.YYYYMM))].sort();

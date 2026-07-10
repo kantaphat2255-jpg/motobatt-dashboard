@@ -89,6 +89,23 @@ export interface TierAnalysisData {
   totalSales: number;
 }
 
+export interface BillSizeRow {
+  label: string;
+  min: number;
+  max: number;
+  invoiceCount: number;
+  invoiceCountPct: number;
+  sales: number;
+  salesPct: number;
+  avgPerInvoice: number;
+}
+
+export interface BillSizeDistributionData {
+  buckets: BillSizeRow[];
+  totalInvoices: number;
+  totalSales: number;
+}
+
 export interface SkuData {
   itemId: string;
   itemDesc: string;
@@ -162,6 +179,7 @@ export interface DashboardApiResponse {
   overviewCompare: MonthlyOverviewData | null;
   compareRange: { from: string; to: string } | null;
   tierAnalysis: TierAnalysisData;
+  billSizeDistribution: BillSizeDistributionData;
   skuBreakdown: SkuBreakdownData;
   dealerHealth: DealerHealthData;
   trend: TrendData;
