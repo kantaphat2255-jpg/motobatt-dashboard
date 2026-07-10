@@ -136,17 +136,23 @@ export function aggregateTierAnalysis(
       };
     });
 
-  // Order size distribution: total cases each dealer bought this period (known tiers only).
-  // We group dealers by their monthly volume (e.g. a dealer with 40 cases across 6
-  // orders counts as "40 ลัง", not by average order size).
-  const dealerVolume = new Map<string, { tier: TierKnown; totalCases: number }>();
+  // Order size distribution: each dealer's typical monthly case volume (known tiers
+  // only) = total cases ÷ number of distinct calendar months they actually bought in
+  // within the selected range. This keeps the bucket meaning "cases per month" even
+  // when a multi-month range (e.g. a quarter) is selected — a dealer active in only
+  // 1 of the 3 months lands in the bucket for their real monthly total (e.g. "40 ลัง"),
+  // instead of that total being diluted by dividing by all 3 months in the range
+  // regardless of whether they bought anything in the other two.
+  const dealerVolume = new Map<string, { tier: TierKnown; totalCases: number; months: Set<string> }>();
   for (const r of monthRows) {
     if (!['A', 'B', 'C', 'D'].includes(r.Tier)) continue;
     const tier = r.Tier as TierKnown;
     if (!dealerVolume.has(r.CUSTOMER_ID)) {
-      dealerVolume.set(r.CUSTOMER_ID, { tier, totalCases: 0 });
+      dealerVolume.set(r.CUSTOMER_ID, { tier, totalCases: 0, months: new Set() });
     }
-    dealerVolume.get(r.CUSTOMER_ID)!.totalCases += r.cases;
+    const dv = dealerVolume.get(r.CUSTOMER_ID)!;
+    dv.totalCases += r.cases;
+    dv.months.add(r.YYYYMM);
   }
 
   // Tier totals for % calculation
@@ -157,11 +163,11 @@ export function aggregateTierAnalysis(
 
   const orderSizeDistribution: OrderSizeRow[] = ORDER_SIZE_RANGES.map(range => {
     const counts: Partial<Record<TierKnown, number>> = {};
-    for (const { tier, totalCases } of dealerVolume.values()) {
-      // Round to the nearest whole case so fractional totals (e.g. 40.1) still land
+    for (const { tier, totalCases, months } of dealerVolume.values()) {
+      // Round to the nearest whole case so fractional averages (e.g. 40.1) still land
       // in a bucket — otherwise a dealer falls through the integer rows and the
       // per-tier column stops summing to 100%.
-      const rounded = Math.round(totalCases);
+      const rounded = Math.round(totalCases / months.size);
       if (rounded >= range.min && rounded <= range.max) {
         counts[tier] = (counts[tier] || 0) + 1;
       }

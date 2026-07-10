@@ -95,8 +95,11 @@ function TierContent() {
         {/* Order Size Distribution */}
         <div className="bg-[#1C1C1C] border border-[#2A2A2A] rounded-xl p-5">
           <h2 className="text-sm font-semibold text-gray-300 mb-4">
-            การกระจายขนาดการซื้อต่อร้าน (ลังรวมทั้งเดือน)
+            การกระจายขนาดการซื้อต่อร้าน (เฉลี่ยลัง/เดือนที่ซื้อจริง)
           </h2>
+          <p className="text-xs text-gray-500 -mt-3 mb-4">
+            คิดจากยอดลังรวม ÷ จำนวนเดือนที่ร้านนั้นมีการซื้อจริงในช่วงที่เลือก — เลือกช่วงยาวกว่า 1 เดือน (เช่นไตรมาส) ก็ยังสะท้อนขนาดกองที่ซื้อต่อครั้งได้ถูกต้อง
+          </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
