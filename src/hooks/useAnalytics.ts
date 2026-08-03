@@ -170,13 +170,15 @@ export function useDealerSales(from?: string, to?: string) {
   return { data, loading, error, refresh };
 }
 
-export function useZoneSales(from?: string, to?: string) {
-  const cacheKey = `${from ?? ''}__${to ?? ''}`;
+export function useZoneSales(from?: string, to?: string, compareFrom?: string | null, compareTo?: string | null) {
+  const hasCompare = !!(compareFrom && compareTo);
+  const cacheKey = `${from ?? ''}__${to ?? ''}__${hasCompare ? `${compareFrom}_${compareTo}` : ''}`;
 
   const buildUrl = (refresh: boolean) => {
     const p = new URLSearchParams();
     if (from) p.set('from', from);
     if (to) p.set('to', to);
+    if (hasCompare) { p.set('cfrom', compareFrom!); p.set('cto', compareTo!); }
     if (refresh) p.set('refresh', '1');
     const qs = p.toString();
     return `/api/analytics/zone-sales${qs ? `?${qs}` : ''}`;

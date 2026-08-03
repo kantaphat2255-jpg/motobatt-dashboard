@@ -6,17 +6,32 @@ import { useZoneSales } from '@/hooks/useAnalytics';
 import DataFreshness from '@/components/layout/DataFreshness';
 import DateRangePicker from '@/components/ui/DateRangePicker';
 import MetricCard from '@/components/ui/MetricCard';
+import TrendBadge from '@/components/ui/TrendBadge';
 import ZoneBarChart from '@/components/charts/ZoneBarChart';
 import { formatCurrency, formatNumber } from '@/lib/utils';
+import { formatDateRangeThai } from '@/lib/dateRange';
 import { ONLINE_CHANNEL_COLORS } from '@/lib/constants';
 import { Loader2, AlertCircle } from 'lucide-react';
+
+function pctDelta(curr: number, prev: number | undefined): number | null {
+  if (prev === undefined || prev <= 0) return null;
+  return ((curr - prev) / prev) * 100;
+}
 
 function ZoneSalesContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const from = searchParams.get('from') || searchParams.get('month') || undefined;
   const to = searchParams.get('to') || searchParams.get('month') || undefined;
-  const { data, loading, error, refresh } = useZoneSales(from, to);
+  const cfrom = searchParams.get('cfrom');
+  const cto = searchParams.get('cto');
+  const { data, loading, error, refresh } = useZoneSales(from, to, cfrom, cto);
+
+  const handleChange = (f: string, t: string, compare: { from: string; to: string } | null) => {
+    const p = new URLSearchParams({ from: f, to: t });
+    if (compare) { p.set('cfrom', compare.from); p.set('cto', compare.to); }
+    router.push(`/zone-sales?${p.toString()}`);
+  };
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -30,7 +45,14 @@ function ZoneSalesContent() {
     </div>
   );
 
-  const { meta, data: ds } = data;
+  const { meta, data: ds, dataCompare: dc, compareRange } = data;
+
+  const zoneCompareMap = new Map(dc?.zones.map(z => [z.zoneId, z]) ?? []);
+  const channelCompareMap = new Map(dc?.onlineChannels.map(c => [c.zoneId, c]) ?? []);
+  const totalDelta = pctDelta(ds.totalSales, dc?.totalSales);
+  const coreDelta = pctDelta(ds.coreZoneSales, dc?.coreZoneSales);
+  const onlineDelta = pctDelta(ds.onlineSales, dc?.onlineSales);
+  const otherDelta = pctDelta(ds.otherSales, dc?.otherSales);
 
   return (
     <>
@@ -43,28 +65,43 @@ function ZoneSalesContent() {
             maxDate={meta.maxDate}
             from={meta.rangeFrom}
             to={meta.rangeTo}
-            onChange={(f, t) => router.push(`/zone-sales?from=${f}&to=${t}`)}
+            compareFrom={compareRange?.from ?? null}
+            compareTo={compareRange?.to ?? null}
+            onChange={handleChange}
           />
         </div>
 
+        {compareRange && (
+          <p className="text-xs text-gray-500">
+            เทียบกับ {formatDateRangeThai(compareRange.from, compareRange.to)}
+          </p>
+        )}
+
         {/* Summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          <MetricCard title="ยอดขายรวม" value={formatCurrency(ds.totalSales)} />
+          <MetricCard
+            title="ยอดขายรวม"
+            value={formatCurrency(ds.totalSales)}
+            badge={dc && <TrendBadge pct={totalDelta} />}
+          />
           <MetricCard
             title="เขตหลักที่ดูแล"
             value={formatCurrency(ds.coreZoneSales)}
             subtitle={`${(ds.coreZoneSales / (ds.totalSales || 1) * 100).toFixed(1)}% ของยอดรวม`}
+            badge={dc && <TrendBadge pct={coreDelta} />}
             highlight
           />
           <MetricCard
             title="ออนไลน์"
             value={formatCurrency(ds.onlineSales)}
             subtitle={`${ds.onlinePctOfTotal.toFixed(1)}% ของยอดรวม`}
+            badge={dc && <TrendBadge pct={onlineDelta} />}
           />
           <MetricCard
             title="อื่นๆ / นอกเขตที่ดูแล"
             value={formatCurrency(ds.otherSales)}
             subtitle={`${(ds.otherSales / (ds.totalSales || 1) * 100).toFixed(1)}% ของยอดรวม`}
+            badge={dc && <TrendBadge pct={otherDelta} />}
           />
         </div>
 
@@ -86,7 +123,8 @@ function ZoneSalesContent() {
                       <th className="text-right py-2 px-3 font-medium">จำนวนหน่วย</th>
                       <th className="text-right py-2 px-3 font-medium">ลัง</th>
                       <th className="text-right py-2 px-3 font-medium">ดีลเลอร์</th>
-                      <th className="text-right py-2 pl-3 font-medium">บิล</th>
+                      <th className="text-right py-2 px-3 font-medium">บิล</th>
+                      {dc && <th className="text-right py-2 pl-3 font-medium">เทียบช่วงก่อน</th>}
                     </tr>
                   </thead>
                   <tbody>
@@ -98,7 +136,12 @@ function ZoneSalesContent() {
                         <td className="py-2 px-3 text-right tabular-nums text-gray-300">{formatNumber(z.units)}</td>
                         <td className="py-2 px-3 text-right tabular-nums text-gray-300">{formatNumber(z.cases, 1)}</td>
                         <td className="py-2 px-3 text-right tabular-nums text-gray-400">{z.dealerCount}</td>
-                        <td className="py-2 pl-3 text-right tabular-nums text-gray-400">{z.invoiceCount}</td>
+                        <td className="py-2 px-3 text-right tabular-nums text-gray-400">{z.invoiceCount}</td>
+                        {dc && (
+                          <td className="py-2 pl-3 text-right">
+                            <TrendBadge pct={pctDelta(z.sales, zoneCompareMap.get(z.zoneId)?.sales)} />
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -121,9 +164,12 @@ function ZoneSalesContent() {
                   className="bg-[#17191C] border border-[#2A2A2A] rounded-xl p-4"
                   style={{ borderLeftColor: ONLINE_CHANNEL_COLORS[c.channel] ?? '#6B7280', borderLeftWidth: 3 }}
                 >
-                  <p className="text-xs text-gray-400 mb-2 uppercase tracking-wide" style={{ color: ONLINE_CHANNEL_COLORS[c.channel] ?? '#9CA3AF' }}>
-                    {c.channel}
-                  </p>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs uppercase tracking-wide" style={{ color: ONLINE_CHANNEL_COLORS[c.channel] ?? '#9CA3AF' }}>
+                      {c.channel}
+                    </p>
+                    {dc && <TrendBadge pct={pctDelta(c.sales, channelCompareMap.get(c.zoneId)?.sales)} />}
+                  </div>
                   <p className="text-xl font-bold tabular-nums">{formatCurrency(c.sales)}</p>
                   <p className="text-sm text-gray-400 mt-1 tabular-nums">{c.salesPct.toFixed(1)}% ของยอดรวม</p>
                   <div className="mt-3 pt-3 border-t border-[#2A2A2A] grid grid-cols-2 gap-2 text-xs">

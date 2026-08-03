@@ -45,6 +45,9 @@ export async function GET(req: NextRequest) {
     const def = defaultRange(minDate, maxDate);
     const from = normalizeDateParam(searchParams.get('from'), 'from') || def.from;
     const to = normalizeDateParam(searchParams.get('to'), 'to') || def.to;
+    const cfrom = normalizeDateParam(searchParams.get('cfrom'), 'from');
+    const cto = normalizeDateParam(searchParams.get('cto'), 'to');
+    const hasCompare = !!(cfrom && cto);
 
     const meta = {
       fetchedAt,
@@ -64,6 +67,8 @@ export async function GET(req: NextRequest) {
     const response: ZoneSalesApiResponse = {
       meta,
       data: aggregateZoneSales(normalizedRows, from, to),
+      dataCompare: hasCompare ? aggregateZoneSales(normalizedRows, cfrom!, cto!) : null,
+      compareRange: hasCompare ? { from: cfrom!, to: cto! } : null,
     };
 
     return NextResponse.json(response);

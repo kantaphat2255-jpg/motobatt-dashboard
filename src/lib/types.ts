@@ -401,4 +401,6 @@ export interface ZoneSalesData {
 export interface ZoneSalesApiResponse {
   meta: DataMeta;
   data: ZoneSalesData;
+  dataCompare: ZoneSalesData | null;
+  compareRange: { from: string; to: string } | null;
 }
