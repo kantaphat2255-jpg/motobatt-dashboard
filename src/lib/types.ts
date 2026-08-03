@@ -177,6 +177,8 @@ export interface DashboardApiResponse {
   meta: DataMeta;
   overview: MonthlyOverviewData;
   overviewCompare: MonthlyOverviewData | null;
+  overviewNet: MonthlyOverviewData;
+  overviewNetCompare: MonthlyOverviewData | null;
   compareRange: { from: string; to: string } | null;
   tierAnalysis: TierAnalysisData;
   billSizeDistribution: BillSizeDistributionData;

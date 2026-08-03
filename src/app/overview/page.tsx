@@ -1,7 +1,7 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { useDashboard } from '@/hooks/useDashboard';
 import DataFreshness from '@/components/layout/DataFreshness';
 import MetricCard from '@/components/ui/MetricCard';
@@ -20,6 +20,7 @@ function OverviewContent() {
   const cfrom = searchParams.get('cfrom');
   const cto = searchParams.get('cto');
   const { data, loading, error, refresh } = useDashboard(from, to, cfrom, cto);
+  const [netView, setNetView] = useState(false);
 
   const handleChange = (f: string, t: string, compare: { from: string; to: string } | null) => {
     const p = new URLSearchParams({ from: f, to: t });
@@ -45,8 +46,11 @@ function OverviewContent() {
     );
   }
 
-  const { overview: ov, overviewCompare: cmp, compareRange, meta } = data;
+  const { overview, overviewCompare, overviewNet, overviewNetCompare, compareRange, meta } = data;
+  const ov = netView ? overviewNet : overview;
+  const cmp = netView ? overviewNetCompare : overviewCompare;
   const salesDelta = cmp && cmp.mtdSales > 0 ? ((ov.mtdSales - cmp.mtdSales) / cmp.mtdSales) * 100 : null;
+  const returnsAmount = overview.mtdSales - overviewNet.mtdSales;
 
   return (
     <>
@@ -76,7 +80,25 @@ function OverviewContent() {
           <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-[#F5C400]/70 to-transparent" />
           <div className="flex items-start justify-between mb-4">
             <div>
-              <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">ยอดขายในช่วง</p>
+              <div className="flex items-center gap-3 mb-1">
+                <p className="text-xs text-gray-400 uppercase tracking-wide">ยอดขายในช่วง</p>
+                <div className="flex rounded-md border border-[#2A2F36] overflow-hidden text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setNetView(false)}
+                    className={`px-2 py-0.5 ${!netView ? 'bg-[#F5C400] text-black font-semibold' : 'text-gray-400 hover:text-gray-200'}`}
+                  >
+                    Gross
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNetView(true)}
+                    className={`px-2 py-0.5 ${netView ? 'bg-[#F5C400] text-black font-semibold' : 'text-gray-400 hover:text-gray-200'}`}
+                  >
+                    Net
+                  </button>
+                </div>
+              </div>
               <p className="text-4xl font-bold text-[#F5C400] tabular-nums leading-none">
                 {formatCurrency(ov.mtdSales)}
               </p>
@@ -84,6 +106,9 @@ function OverviewContent() {
                 {ov.isOngoing
                   ? `วันที่ ${ov.daysElapsed} จาก ${ov.daysTotal} วัน`
                   : formatDateRangeThai(ov.fromDate, ov.toDate)}
+                {netView && returnsAmount !== 0 && (
+                  <span className="text-gray-500"> · หักคืนสินค้า/เคลม {formatCurrency(Math.abs(returnsAmount))}</span>
+                )}
               </p>
               {cmp && compareRange && (
                 <p className="text-sm mt-1.5 flex items-center gap-2">

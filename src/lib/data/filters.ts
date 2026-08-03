@@ -12,6 +12,21 @@ export function applyBaseFilters(rows: RawDataRow[]): RawDataRow[] {
   });
 }
 
+// Same scope as applyBaseFilters but keeps return/claim rows (negative QTY or
+// NET_AMOUNT) instead of dropping them — for the opt-in "net of returns" view
+// on the Overview page, used to reconcile against manual net Sheet pivots.
+// Does not affect dealer/tier counting anywhere (see filterCoreZones note in
+// the Overview page toggle) — that stays gross-only per earlier decision.
+export function applyBaseFiltersInclReturns(rows: RawDataRow[]): RawDataRow[] {
+  return rows.filter(r => {
+    if (r.CATEGORY !== 'แบตเตอรี่') return false;
+    if (r.SALE_TYPE !== 'ในประเทศ') return false;
+    if (parseInt(r.YYYYMM, 10) < DATA_START_YYYYMM) return false;
+    if (r.QTY === 0 && r.NET_AMOUNT === 0) return false;
+    return true;
+  });
+}
+
 // Excludes online marketplace channels (Lazada/Shopee/TikTok) and the 40-70
 // out-of-scope zone from every "core business" aggregation. The Zone Sales
 // page intentionally does NOT call this — it exists to show these zones.

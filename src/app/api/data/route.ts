@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchSheetsData, getCacheTimestamp } from '@/lib/sheets';
 import { normalizeDataRows, normalizeDealerRows } from '@/lib/data/normalize';
-import { applyBaseFilters, applyNewDealerFilters, filterCoreZones } from '@/lib/data/filters';
+import { applyBaseFilters, applyBaseFiltersInclReturns, applyNewDealerFilters, filterCoreZones } from '@/lib/data/filters';
 import { joinDealerTier } from '@/lib/data/join';
 import {
   aggregateMonthlyOverview, aggregateTierAnalysis, aggregateBillSizeDistribution,
@@ -36,6 +36,10 @@ export async function GET(req: NextRequest) {
     const baseFiltered = filterCoreZones(applyBaseFilters(parsedRows));
     const { rows: normalizedRows, failedIds } = joinDealerTier(baseFiltered, dealers);
 
+    // Net-of-returns rowset, core zones only, for the opt-in Overview toggle.
+    const netFiltered = filterCoreZones(applyBaseFiltersInclReturns(parsedRows));
+    const { rows: normalizedNetRows } = joinDealerTier(netFiltered, dealers);
+
     const availableMonths = [...new Set(normalizedRows.map(r => r.YYYYMM))].sort();
     const latestMonth = availableMonths[availableMonths.length - 1] || '';
 
@@ -69,10 +73,24 @@ export async function GET(req: NextRequest) {
       rangeTo: to,
     };
 
+    const overview = aggregateMonthlyOverview(normalizedRows, from, to, maxDate);
+    const overviewCompare = hasCompare ? aggregateMonthlyOverview(normalizedRows, cfrom!, cto!, maxDate) : null;
+
+    // Net-of-returns variant of the same figures. Active-dealer count is
+    // pinned back to the gross figure — netting dealer counts against
+    // returns was tried and explicitly rejected before, so the toggle only
+    // ever changes the ฿/units/cases numbers, never who counts as "active."
+    const overviewNet = { ...aggregateMonthlyOverview(normalizedNetRows, from, to, maxDate), activeDealers: overview.activeDealers };
+    const overviewNetCompare = hasCompare
+      ? { ...aggregateMonthlyOverview(normalizedNetRows, cfrom!, cto!, maxDate), activeDealers: overviewCompare!.activeDealers }
+      : null;
+
     const response: DashboardApiResponse = {
       meta,
-      overview: aggregateMonthlyOverview(normalizedRows, from, to, maxDate),
-      overviewCompare: hasCompare ? aggregateMonthlyOverview(normalizedRows, cfrom!, cto!, maxDate) : null,
+      overview,
+      overviewCompare,
+      overviewNet,
+      overviewNetCompare,
       compareRange: hasCompare ? { from: cfrom!, to: cto! } : null,
       tierAnalysis: aggregateTierAnalysis(normalizedRows, from, to),
       billSizeDistribution: aggregateBillSizeDistribution(normalizedRows, from, to),
