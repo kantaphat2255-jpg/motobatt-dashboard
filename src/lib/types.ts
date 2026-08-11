@@ -406,3 +406,44 @@ export interface ZoneSalesApiResponse {
   dataCompare: ZoneSalesData | null;
   compareRange: { from: string; to: string } | null;
 }
+
+// --- Zone Trend ---
+export type TrendGranularity = 'month' | 'quarter';
+
+export interface ZoneTrendSkuRow {
+  itemId: string;
+  itemDesc: string;
+  sales: number;
+  cases: number;
+}
+
+export interface ZoneTrendPoint {
+  period: string;   // '202601' (month) | '2026-Q1' (quarter)
+  label: string;     // 'ม.ค.' | 'Q1'
+  sales: number;
+  dealerCount: number;
+  units: number;
+  cases: number;
+}
+
+export interface ZoneTrendRow {
+  zoneId: string;
+  points: ZoneTrendPoint[];
+  totalSales: number;
+  periodDealerCount: number;   // distinct dealers across the whole selected period
+  trendPct: number | null;     // avg(2nd half points) vs avg(1st half points)
+  topSkus: ZoneTrendSkuRow[];  // top 3 by sales, whole period
+}
+
+export interface ZoneTrendData {
+  year: number;
+  granularity: TrendGranularity;
+  periods: { period: string; label: string }[];
+  zones: ZoneTrendRow[];
+}
+
+export interface ZoneTrendApiResponse {
+  meta: DataMeta;
+  availableYears: number[];
+  data: ZoneTrendData;
+}

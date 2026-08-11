@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { BarChart2, Layers, Package, Users, TrendingUp, GitCompare, Star, RefreshCw, RotateCcw, Store, MapPin } from 'lucide-react';
+import { BarChart2, Layers, Package, Users, TrendingUp, GitCompare, Star, RefreshCw, RotateCcw, Store, MapPin, Map } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/overview', icon: BarChart2, label: 'ภาพรวมรายเดือน' },
@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: '/dealer-health', icon: Users, label: 'สุขภาพดีลเลอร์' },
   { href: '/dealer-sales', icon: Store, label: 'Dealer Sales' },
   { href: '/zone-sales', icon: MapPin, label: 'ยอดขายตามเขต' },
+  { href: '/zone-trend', icon: Map, label: 'แนวโน้มรายเขต' },
   { href: '/trend', icon: TrendingUp, label: 'แนวโน้ม 6 เดือน' },
 ];
 

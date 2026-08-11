@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { MonthCompareApiResponse, DealerRfmApiResponse, PurchaseCycleApiResponse, DealerSalesApiResponse, ZoneSalesApiResponse } from '@/lib/types';
+import type { MonthCompareApiResponse, DealerRfmApiResponse, PurchaseCycleApiResponse, DealerSalesApiResponse, ZoneSalesApiResponse, ZoneTrendApiResponse, TrendGranularity } from '@/lib/types';
 
 const compareCache = new Map<string, MonthCompareApiResponse>();
 const compareInflight = new Map<string, Promise<void>>();
@@ -13,6 +13,8 @@ const dealerSalesCache = new Map<string, DealerSalesApiResponse>();
 const dealerSalesInflight = new Map<string, Promise<void>>();
 const zoneSalesCache = new Map<string, ZoneSalesApiResponse>();
 const zoneSalesInflight = new Map<string, Promise<void>>();
+const zoneTrendCache = new Map<string, ZoneTrendApiResponse>();
+const zoneTrendInflight = new Map<string, Promise<void>>();
 
 export function useMonthCompare(base: string, compare: string) {
   const cacheKey = `${base}__${compare}`;
@@ -213,6 +215,53 @@ export function useZoneSales(from?: string, to?: string, compareFrom?: string | 
 
   const refresh = useCallback(() => {
     zoneSalesCache.delete(cacheKey);
+    load(true);
+  }, [cacheKey, load]);
+
+  return { data, loading, error, refresh };
+}
+
+export function useZoneTrend(year?: number, granularity?: TrendGranularity) {
+  const cacheKey = `${year ?? ''}__${granularity ?? ''}`;
+
+  const buildUrl = (refresh: boolean) => {
+    const p = new URLSearchParams();
+    if (year) p.set('year', String(year));
+    if (granularity) p.set('granularity', granularity);
+    if (refresh) p.set('refresh', '1');
+    const qs = p.toString();
+    return `/api/analytics/zone-trend${qs ? `?${qs}` : ''}`;
+  };
+
+  const [data, setData] = useState<ZoneTrendApiResponse | null>(() => zoneTrendCache.get(cacheKey) ?? null);
+  const [loading, setLoading] = useState(!zoneTrendCache.has(cacheKey));
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback((refresh = false) => {
+    if (!refresh && zoneTrendCache.has(cacheKey)) {
+      setData(zoneTrendCache.get(cacheKey)!);
+      setLoading(false);
+      return;
+    }
+    if (!refresh && zoneTrendInflight.has(cacheKey)) return;
+    setLoading(true);
+    setError(null);
+    const p: Promise<void> = fetch(buildUrl(refresh))
+      .then(r => r.json())
+      .then((d: ZoneTrendApiResponse & { error?: string }) => {
+        if (d.error) throw new Error(d.error);
+        zoneTrendCache.set(cacheKey, d);
+        setData(d);
+      })
+      .catch(e => setError(e.message || 'เกิดข้อผิดพลาด'))
+      .finally(() => { zoneTrendInflight.delete(cacheKey); setLoading(false); });
+    zoneTrendInflight.set(cacheKey, p);
+  }, [cacheKey]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { load(); }, [load]);
+
+  const refresh = useCallback(() => {
+    zoneTrendCache.delete(cacheKey);
     load(true);
   }, [cacheKey, load]);
 

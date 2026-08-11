@@ -9,10 +9,11 @@ import type {
   ReturnMonthData, ReturnSkuRow, ReturnDealerRow,
   DealerSalesData, DealerSaleRow, DealerSalesSummary,
   ZoneSalesData, ZoneBreakdownRow, OnlineChannelRow,
+  TrendGranularity, ZoneTrendData, ZoneTrendRow, ZoneTrendPoint, ZoneTrendSkuRow,
 } from '../types';
 import {
   MONTHLY_TARGETS, ORDER_SIZE_RANGES, BILL_SIZE_RANGES, CUMULATIVE_APR_DEC_2026_TARGET, CUMULATIVE_START_YYYYMM,
-  CORE_ZONES, ONLINE_ZONE_LABELS,
+  CORE_ZONES, ONLINE_ZONE_LABELS, THAI_MONTHS_SHORT,
 } from '../constants';
 import {
   getBangkokDate, parseDate, formatMonthLabel,
@@ -965,4 +966,95 @@ export function aggregateZoneSales(
     onlinePctOfTotal: totalSales > 0 ? (onlineSales / totalSales) * 100 : 0,
     zones, onlineChannels,
   };
+}
+
+// Per-zone trend across a whole year, bucketed by month or quarter — lets the
+// user see whether a zone's sales/dealer count is growing or shrinking over
+// time, plus its top-selling SKUs for the whole selected period. Core zones
+// only (same scope as the "เขตหลักที่ดูแล" table in aggregateZoneSales).
+export function aggregateZoneTrend(
+  rows: NormalizedRow[],
+  year: number,
+  granularity: TrendGranularity
+): ZoneTrendData {
+  const yearRows = rows.filter(r => r.YYYYMM.startsWith(String(year)) && CORE_ZONES.includes(r.ZONE_ID));
+
+  function periodOf(r: NormalizedRow): { key: string; label: string } {
+    const m = Number(r.YYYYMM.slice(4, 6));
+    if (granularity === 'month') {
+      return { key: r.YYYYMM, label: THAI_MONTHS_SHORT[m - 1] };
+    }
+    const q = Math.floor((m - 1) / 3) + 1;
+    return { key: `${year}-Q${q}`, label: `Q${q}` };
+  }
+
+  const periodLabels = new Map<string, string>();
+  for (const r of yearRows) {
+    const { key, label } = periodOf(r);
+    periodLabels.set(key, label);
+  }
+  const periods = [...periodLabels.entries()]
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([period, label]) => ({ period, label }));
+
+  const zoneIds = CORE_ZONES.filter(z => yearRows.some(r => r.ZONE_ID === z));
+
+  const zones: ZoneTrendRow[] = zoneIds.map(zoneId => {
+    const zoneRows = yearRows.filter(r => r.ZONE_ID === zoneId);
+
+    const periodMap = new Map<string, { sales: number; units: number; cases: number; dealers: Set<string> }>();
+    for (const r of zoneRows) {
+      const { key } = periodOf(r);
+      if (!periodMap.has(key)) periodMap.set(key, { sales: 0, units: 0, cases: 0, dealers: new Set() });
+      const p = periodMap.get(key)!;
+      p.sales += r.NET_AMOUNT;
+      p.units += r.QTY;
+      p.cases += r.cases;
+      p.dealers.add(r.CUSTOMER_ID);
+    }
+
+    const points: ZoneTrendPoint[] = periods.map(({ period, label }) => {
+      const p = periodMap.get(period);
+      return {
+        period, label,
+        sales: p?.sales ?? 0,
+        dealerCount: p?.dealers.size ?? 0,
+        units: p?.units ?? 0,
+        cases: p?.cases ?? 0,
+      };
+    });
+
+    const totalSales = zoneRows.reduce((s, r) => s + r.NET_AMOUNT, 0);
+    const periodDealerCount = new Set(zoneRows.map(r => r.CUSTOMER_ID)).size;
+
+    // Trend: average sales of the second half of periods vs. the first half
+    // (middle point dropped when the count is odd) — smooths single-month
+    // noise better than a first-vs-last comparison.
+    const n = points.length;
+    const half = Math.floor(n / 2);
+    let trendPct: number | null = null;
+    if (n >= 2) {
+      const firstHalf = points.slice(0, half);
+      const secondHalf = points.slice(n - half);
+      const avgFirst = firstHalf.reduce((s, p) => s + p.sales, 0) / firstHalf.length;
+      const avgSecond = secondHalf.reduce((s, p) => s + p.sales, 0) / secondHalf.length;
+      trendPct = avgFirst > 0 ? ((avgSecond - avgFirst) / avgFirst) * 100 : null;
+    }
+
+    const skuMap = new Map<string, { desc: string; sales: number; cases: number }>();
+    for (const r of zoneRows) {
+      if (!skuMap.has(r.ITEM_ID)) skuMap.set(r.ITEM_ID, { desc: r.ITEM_DESC, sales: 0, cases: 0 });
+      const s = skuMap.get(r.ITEM_ID)!;
+      s.sales += r.NET_AMOUNT;
+      s.cases += r.cases;
+    }
+    const topSkus: ZoneTrendSkuRow[] = Array.from(skuMap.entries())
+      .map(([itemId, d]) => ({ itemId, itemDesc: d.desc, sales: d.sales, cases: d.cases }))
+      .sort((a, b) => b.sales - a.sales)
+      .slice(0, 3);
+
+    return { zoneId, points, totalSales, periodDealerCount, trendPct, topSkus };
+  }).sort((a, b) => b.totalSales - a.totalSales);
+
+  return { year, granularity, periods, zones };
 }
