@@ -369,6 +369,27 @@ export interface DealerSalesApiResponse {
 }
 
 // --- Zone Sales ---
+export interface ZoneDealerMonthRow {
+  month: string;   // 'YYYYMM'
+  label: string;   // 'ม.ค. 2026'
+  sales: number;
+  units: number;
+  cases: number;
+  invoiceCount: number;
+}
+
+export interface ZoneDealerRow {
+  customerId: string;
+  customerName: string;
+  tier: Tier;
+  totalSales: number;
+  totalUnits: number;
+  totalCases: number;
+  invoiceCount: number;
+  lastInvoiceDate: string | null;
+  months: ZoneDealerMonthRow[];
+}
+
 export interface ZoneBreakdownRow {
   zoneId: string;
   sales: number;
@@ -377,6 +398,7 @@ export interface ZoneBreakdownRow {
   cases: number;
   dealerCount: number;
   invoiceCount: number;
+  dealers: ZoneDealerRow[];
 }
 
 export interface OnlineChannelRow {

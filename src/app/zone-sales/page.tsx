@@ -1,21 +1,124 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Suspense } from 'react';
+import { Fragment, Suspense, useState } from 'react';
 import { useZoneSales } from '@/hooks/useAnalytics';
 import DataFreshness from '@/components/layout/DataFreshness';
 import DateRangePicker from '@/components/ui/DateRangePicker';
 import MetricCard from '@/components/ui/MetricCard';
 import TrendBadge from '@/components/ui/TrendBadge';
 import ZoneBarChart from '@/components/charts/ZoneBarChart';
-import { formatCurrency, formatNumber } from '@/lib/utils';
+import { formatCurrency, formatNumber, formatDateThai } from '@/lib/utils';
 import { formatDateRangeThai } from '@/lib/dateRange';
-import { ONLINE_CHANNEL_COLORS } from '@/lib/constants';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { ONLINE_CHANNEL_COLORS, TIER_COLORS, TIER_LABELS } from '@/lib/constants';
+import type { ZoneDealerRow } from '@/lib/types';
+import { Loader2, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react';
 
 function pctDelta(curr: number, prev: number | undefined): number | null {
   if (prev === undefined || prev <= 0) return null;
   return ((curr - prev) / prev) * 100;
+}
+
+function TierBadge({ tier }: { tier: string }) {
+  return (
+    <span
+      className="inline-block px-1.5 py-0.5 rounded text-xs font-medium"
+      style={{ background: (TIER_COLORS[tier] ?? '#6B7280') + '22', color: TIER_COLORS[tier] ?? '#6B7280' }}
+    >
+      {TIER_LABELS[tier] ?? tier}
+    </span>
+  );
+}
+
+function ZoneDealerMonthTable({ months }: { months: ZoneDealerRow['months'] }) {
+  if (months.length === 0) return <p className="text-gray-500 text-xs py-2">ไม่มีข้อมูล</p>;
+  return (
+    <table className="w-full text-xs">
+      <thead>
+        <tr className="text-gray-500">
+          <th className="text-left py-1 pr-3 font-medium">เดือน</th>
+          <th className="text-right py-1 px-3 font-medium">ยอดขาย</th>
+          <th className="text-right py-1 px-3 font-medium">จำนวนหน่วย</th>
+          <th className="text-right py-1 px-3 font-medium">ลัง</th>
+          <th className="text-right py-1 pl-3 font-medium">บิล</th>
+        </tr>
+      </thead>
+      <tbody>
+        {months.map(m => (
+          <tr key={m.month} className="border-t border-[#222]">
+            <td className="py-1.5 pr-3 text-gray-300">{m.label}</td>
+            <td className="py-1.5 px-3 text-right tabular-nums text-gray-300">{formatCurrency(m.sales)}</td>
+            <td className="py-1.5 px-3 text-right tabular-nums text-gray-400">{formatNumber(m.units)}</td>
+            <td className="py-1.5 px-3 text-right tabular-nums text-gray-400">{formatNumber(m.cases, 1)}</td>
+            <td className="py-1.5 pl-3 text-right tabular-nums text-gray-400">{m.invoiceCount}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function ZoneDealersPanel({ zoneId, dealers }: { zoneId: string; dealers: ZoneDealerRow[] }) {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  function toggle(customerId: string) {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(customerId)) next.delete(customerId); else next.add(customerId);
+      return next;
+    });
+  }
+
+  if (dealers.length === 0) return <p className="text-gray-500 text-xs py-3">ไม่มีข้อมูลลูกค้าในเขตนี้</p>;
+
+  return (
+    <table className="w-full text-xs">
+      <thead>
+        <tr className="text-gray-500">
+          <th className="py-1.5 pl-1 w-5" />
+          <th className="text-left py-1.5 pr-3 font-medium">รหัส</th>
+          <th className="text-left py-1.5 pr-3 font-medium">ชื่อลูกค้า</th>
+          <th className="text-center py-1.5 px-2 font-medium">เทียร์</th>
+          <th className="text-right py-1.5 px-3 font-medium">ยอดขาย</th>
+          <th className="text-right py-1.5 px-3 font-medium">จำนวนหน่วย</th>
+          <th className="text-right py-1.5 px-3 font-medium">เดือนที่ซื้อ</th>
+          <th className="text-right py-1.5 pl-2 font-medium">ล่าสุด</th>
+        </tr>
+      </thead>
+      <tbody>
+        {dealers.map(d => {
+          const isOpen = expanded.has(d.customerId);
+          const key = `${zoneId}:${d.customerId}`;
+          return (
+            <Fragment key={key}>
+              <tr
+                onClick={() => toggle(d.customerId)}
+                className="border-t border-[#222] hover:bg-[#1F1F1F] cursor-pointer"
+              >
+                <td className="py-1.5 pl-1 text-gray-500">
+                  {isOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                </td>
+                <td className="py-1.5 pr-3 text-gray-500 tabular-nums">{d.customerId}</td>
+                <td className="py-1.5 pr-3 text-gray-200">{d.customerName}</td>
+                <td className="py-1.5 px-2 text-center"><TierBadge tier={d.tier} /></td>
+                <td className="py-1.5 px-3 text-right tabular-nums text-gray-200 font-medium">{formatCurrency(d.totalSales)}</td>
+                <td className="py-1.5 px-3 text-right tabular-nums text-gray-400">{formatNumber(d.totalUnits)}</td>
+                <td className="py-1.5 px-3 text-right tabular-nums text-gray-400">{d.months.length}</td>
+                <td className="py-1.5 pl-2 text-right tabular-nums text-gray-400">{formatDateThai(d.lastInvoiceDate)}</td>
+              </tr>
+              {isOpen && (
+                <tr className="bg-[#141414]">
+                  <td colSpan={8} className="px-4 py-2">
+                    <ZoneDealerMonthTable months={d.months} />
+                  </td>
+                </tr>
+              )}
+            </Fragment>
+          );
+        })}
+      </tbody>
+    </table>
+  );
 }
 
 function ZoneSalesContent() {
@@ -26,6 +129,15 @@ function ZoneSalesContent() {
   const cfrom = searchParams.get('cfrom');
   const cto = searchParams.get('cto');
   const { data, loading, error, refresh } = useZoneSales(from, to, cfrom, cto);
+  const [expandedZones, setExpandedZones] = useState<Set<string>>(new Set());
+
+  function toggleZone(zoneId: string) {
+    setExpandedZones(prev => {
+      const next = new Set(prev);
+      if (next.has(zoneId)) next.delete(zoneId); else next.add(zoneId);
+      return next;
+    });
+  }
 
   const handleChange = (f: string, t: string, compare: { from: string; to: string } | null) => {
     const p = new URLSearchParams({ from: f, to: t });
@@ -117,6 +229,7 @@ function ZoneSalesContent() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#2A2A2A] text-gray-400 text-xs">
+                      <th className="py-2 pl-1 w-6" />
                       <th className="text-left py-2 pr-3 font-medium">เขต</th>
                       <th className="text-right py-2 px-3 font-medium">ยอดขาย</th>
                       <th className="text-right py-2 px-3 font-medium">% ของรวม</th>
@@ -128,22 +241,40 @@ function ZoneSalesContent() {
                     </tr>
                   </thead>
                   <tbody>
-                    {ds.zones.map(z => (
-                      <tr key={z.zoneId} className="border-b border-[#1A1A1A] hover:bg-[#242424]">
-                        <td className="py-2 pr-3 text-white tabular-nums">{z.zoneId}</td>
-                        <td className="py-2 px-3 text-right tabular-nums font-medium">{formatCurrency(z.sales)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-gray-400">{z.salesPct.toFixed(1)}%</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-gray-300">{formatNumber(z.units)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-gray-300">{formatNumber(z.cases, 1)}</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-gray-400">{z.dealerCount}</td>
-                        <td className="py-2 px-3 text-right tabular-nums text-gray-400">{z.invoiceCount}</td>
-                        {dc && (
-                          <td className="py-2 pl-3 text-right">
-                            <TrendBadge pct={pctDelta(z.sales, zoneCompareMap.get(z.zoneId)?.sales)} />
-                          </td>
-                        )}
-                      </tr>
-                    ))}
+                    {ds.zones.map(z => {
+                      const isOpen = expandedZones.has(z.zoneId);
+                      return (
+                        <Fragment key={z.zoneId}>
+                          <tr
+                            onClick={() => toggleZone(z.zoneId)}
+                            className="border-b border-[#1A1A1A] hover:bg-[#242424] cursor-pointer"
+                          >
+                            <td className="py-2 pl-1 text-gray-500">
+                              {isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            </td>
+                            <td className="py-2 pr-3 text-white tabular-nums">{z.zoneId}</td>
+                            <td className="py-2 px-3 text-right tabular-nums font-medium">{formatCurrency(z.sales)}</td>
+                            <td className="py-2 px-3 text-right tabular-nums text-gray-400">{z.salesPct.toFixed(1)}%</td>
+                            <td className="py-2 px-3 text-right tabular-nums text-gray-300">{formatNumber(z.units)}</td>
+                            <td className="py-2 px-3 text-right tabular-nums text-gray-300">{formatNumber(z.cases, 1)}</td>
+                            <td className="py-2 px-3 text-right tabular-nums text-gray-400">{z.dealerCount}</td>
+                            <td className="py-2 px-3 text-right tabular-nums text-gray-400">{z.invoiceCount}</td>
+                            {dc && (
+                              <td className="py-2 pl-3 text-right">
+                                <TrendBadge pct={pctDelta(z.sales, zoneCompareMap.get(z.zoneId)?.sales)} />
+                              </td>
+                            )}
+                          </tr>
+                          {isOpen && (
+                            <tr className="bg-[#161616] border-b border-[#1A1A1A]">
+                              <td colSpan={dc ? 9 : 8} className="px-4 py-3">
+                                <ZoneDealersPanel zoneId={z.zoneId} dealers={z.dealers} />
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

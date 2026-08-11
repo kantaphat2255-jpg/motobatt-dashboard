@@ -8,7 +8,7 @@ import type {
   DealerRfmRow, CycleStatus, PurchaseCycleRow,
   ReturnMonthData, ReturnSkuRow, ReturnDealerRow,
   DealerSalesData, DealerSaleRow, DealerSalesSummary,
-  ZoneSalesData, ZoneBreakdownRow, OnlineChannelRow,
+  ZoneSalesData, ZoneBreakdownRow, OnlineChannelRow, ZoneDealerRow,
   TrendGranularity, ZoneTrendData, ZoneTrendRow, ZoneTrendPoint, ZoneTrendSkuRow,
 } from '../types';
 import {
@@ -901,6 +901,64 @@ export function aggregateDealerSales(
   return { summary, dealers };
 }
 
+// Per-dealer, per-month breakdown for a single zone's rows — powers the
+// drill-down under each zone row: how many customers, and each customer's
+// units/sales per month within the selected range.
+function buildZoneDealers(zoneRows: NormalizedRow[]): ZoneDealerRow[] {
+  const dealerMap = new Map<string, {
+    name: string; tier: Tier;
+    sales: number; units: number; cases: number;
+    invoices: Set<string>; lastDate: string | null;
+    monthMap: Map<string, { sales: number; units: number; cases: number; invoices: Set<string> }>;
+  }>();
+
+  for (const r of zoneRows) {
+    if (!dealerMap.has(r.CUSTOMER_ID)) {
+      dealerMap.set(r.CUSTOMER_ID, {
+        name: r.CUSTOMER_NAME, tier: r.Tier,
+        sales: 0, units: 0, cases: 0, invoices: new Set(), lastDate: null,
+        monthMap: new Map(),
+      });
+    }
+    const d = dealerMap.get(r.CUSTOMER_ID)!;
+    d.sales += r.NET_AMOUNT;
+    d.units += r.QTY;
+    d.cases += r.cases;
+    d.invoices.add(r.INV_NO);
+    if (!d.lastDate || r.INV_DATE > d.lastDate) d.lastDate = r.INV_DATE;
+
+    if (!d.monthMap.has(r.YYYYMM)) d.monthMap.set(r.YYYYMM, { sales: 0, units: 0, cases: 0, invoices: new Set() });
+    const m = d.monthMap.get(r.YYYYMM)!;
+    m.sales += r.NET_AMOUNT;
+    m.units += r.QTY;
+    m.cases += r.cases;
+    m.invoices.add(r.INV_NO);
+  }
+
+  return Array.from(dealerMap.entries())
+    .map(([customerId, d]) => ({
+      customerId,
+      customerName: d.name,
+      tier: d.tier,
+      totalSales: d.sales,
+      totalUnits: d.units,
+      totalCases: d.cases,
+      invoiceCount: d.invoices.size,
+      lastInvoiceDate: d.lastDate,
+      months: Array.from(d.monthMap.entries())
+        .map(([month, m]) => ({
+          month,
+          label: formatMonthLabel(month),
+          sales: m.sales,
+          units: m.units,
+          cases: m.cases,
+          invoiceCount: m.invoices.size,
+        }))
+        .sort((a, b) => a.month.localeCompare(b.month)),
+    }))
+    .sort((a, b) => b.totalSales - a.totalSales);
+}
+
 // Sales broken down by ZONE_ID: core dealer zones the user manages directly,
 // vs. online marketplace channels (Lazada/Shopee/TikTok), vs. everything else
 // (other teams' territory, unmapped zones).
@@ -936,6 +994,7 @@ export function aggregateZoneSales(
         cases: d.cases,
         dealerCount: d.dealers.size,
         invoiceCount: d.invoices.size,
+        dealers: buildZoneDealers(monthRows.filter(r => r.ZONE_ID === z)),
       };
     })
     .sort((a, b) => b.sales - a.sales);
