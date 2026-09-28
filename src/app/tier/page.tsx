@@ -100,6 +100,14 @@ function TierContent() {
                     <TrendBadge pct={t.avgMomPct} />
                   </div>
                 </div>
+                <div className="col-span-2 flex items-center gap-3 pt-1">
+                  <span className="text-gray-500">
+                    ต่ำกว่าเฉลี่ย <span className="text-red-400 font-semibold tabular-nums">{t.belowAvgCount}</span> ราย
+                  </span>
+                  <span className="text-gray-500">
+                    สูงกว่าเฉลี่ย <span className="text-green-400 font-semibold tabular-nums">{t.aboveAvgCount}</span> ราย
+                  </span>
+                </div>
               </div>
             </div>
           ))}

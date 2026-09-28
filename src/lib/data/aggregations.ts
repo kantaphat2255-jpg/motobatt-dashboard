@@ -124,11 +124,15 @@ export function aggregateTierAnalysis(
   const totalSales = monthRows.reduce((s, r) => s + r.NET_AMOUNT, 0);
 
   const tierMap = new Map<Tier, { sales: number; dealers: Set<string> }>();
+  const dealerSalesByTier = new Map<Tier, Map<string, number>>();
   for (const r of monthRows) {
     if (!tierMap.has(r.Tier)) tierMap.set(r.Tier, { sales: 0, dealers: new Set() });
     const t = tierMap.get(r.Tier)!;
     t.sales += r.NET_AMOUNT;
     t.dealers.add(r.CUSTOMER_ID);
+    if (!dealerSalesByTier.has(r.Tier)) dealerSalesByTier.set(r.Tier, new Map());
+    const ds = dealerSalesByTier.get(r.Tier)!;
+    ds.set(r.CUSTOMER_ID, (ds.get(r.CUSTOMER_ID) ?? 0) + r.NET_AMOUNT);
   }
 
   // Comparison period: an explicit range from the date picker when the user turned
@@ -160,12 +164,28 @@ export function aggregateTierAnalysis(
       const prevSales = cmp?.sales ?? 0;
       const prevDealerCount = cmp?.dealers.size ?? 0;
       const avgPrevSalesPerDealer = prevDealerCount > 0 ? prevSales / prevDealerCount : 0;
+
+      // How many dealers in this tier sold below/above the tier's own average —
+      // shows whether the average is pulled up by a few big accounts or is broadly
+      // representative. Dealers selling exactly the average land in neither count.
+      let belowAvgCount = 0;
+      let aboveAvgCount = 0;
+      const dealerSales = dealerSalesByTier.get(t);
+      if (dealerSales && avgSalesPerDealer > 0) {
+        for (const dealerTotal of dealerSales.values()) {
+          if (dealerTotal < avgSalesPerDealer) belowAvgCount++;
+          else if (dealerTotal > avgSalesPerDealer) aboveAvgCount++;
+        }
+      }
+
       return {
         tier: t,
         sales,
         salesPct: totalSales > 0 ? (sales / totalSales) * 100 : 0,
         dealerCount,
         avgSalesPerDealer,
+        belowAvgCount,
+        aboveAvgCount,
         prevSales,
         salesMomPct: pct(sales, prevSales),
         prevDealerCount,

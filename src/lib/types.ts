@@ -75,6 +75,8 @@ export interface TierSummary {
   salesPct: number;
   dealerCount: number;
   avgSalesPerDealer: number;
+  belowAvgCount: number;
+  aboveAvgCount: number;
   prevSales: number;
   salesMomPct: number | null;
   prevDealerCount: number;
