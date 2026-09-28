@@ -1,5 +1,5 @@
 import type { RawDataRow } from '../types';
-import { DATA_START_YYYYMM, EXCLUDED_ZONE_IDS } from '../constants';
+import { DATA_START_YYYYMM, EXCLUDED_ZONE_IDS, ONLINE_ZONE_IDS } from '../constants';
 
 export function applyBaseFilters(rows: RawDataRow[]): RawDataRow[] {
   return rows.filter(r => {
@@ -27,11 +27,19 @@ export function applyBaseFiltersInclReturns(rows: RawDataRow[]): RawDataRow[] {
   });
 }
 
-// Excludes online marketplace channels (Lazada/Shopee/TikTok) and the 40-70
+// Excludes online channels (Lazada/Shopee/TikTok/Facebook) and the 40-70
 // out-of-scope zone from every "core business" aggregation. The Zone Sales
 // page intentionally does NOT call this — it exists to show these zones.
 export function filterCoreZones(rows: RawDataRow[]): RawDataRow[] {
   return rows.filter(r => !EXCLUDED_ZONE_IDS.includes(r.ZONE_ID));
+}
+
+// The inverse slice: only the online channel zones. Feeds the online-sales
+// sections (Overview, Battery Type) so they use exactly the zones that
+// filterCoreZones removed — no row is counted in both, none in neither
+// (apart from 40-70, which stays out of scope on purpose).
+export function filterOnlineZones(rows: RawDataRow[]): RawDataRow[] {
+  return rows.filter(r => ONLINE_ZONE_IDS.includes(r.ZONE_ID));
 }
 
 // For new dealer detection: battery + domestic only, no YYYYMM cutoff, includes 2023+

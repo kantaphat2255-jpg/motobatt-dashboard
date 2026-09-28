@@ -10,11 +10,14 @@ import type {
   DealerSalesData, DealerSaleRow, DealerSalesSummary,
   ZoneSalesData, ZoneBreakdownRow, OnlineChannelRow, ZoneDealerRow,
   TrendGranularity, ZoneTrendData, ZoneTrendRow, ZoneTrendPoint, ZoneTrendSkuRow,
+  BatteryTypeKey, BatteryTypeData, BatteryTypeRow, BatteryTypeSku, BatteryTypeMonth, BatteryTypeChannelRow,
+  OnlineSalesData, OnlineChannelSummary,
 } from '../types';
 import {
   MONTHLY_TARGETS, ORDER_SIZE_RANGES, BILL_SIZE_RANGES, CUMULATIVE_APR_DEC_2026_TARGET, CUMULATIVE_START_YYYYMM,
-  CORE_ZONES, ONLINE_ZONE_LABELS, THAI_MONTHS_SHORT,
+  CORE_ZONES, ONLINE_ZONE_LABELS, ONLINE_ZONE_IDS, THAI_MONTHS_SHORT, BATTERY_TYPES, BATTERY_TYPE_OTHER,
 } from '../constants';
+import { classifyBatteryType, batteryModelName } from './batteryType';
 import {
   getBangkokDate, parseDate, formatMonthLabel,
 } from '../utils';
@@ -267,6 +270,219 @@ export function aggregateSkuBreakdown(
       .sort((a, b) => (b.momPct ?? 0) - (a.momPct ?? 0)),
     declining: skus.filter(s => s.momPct !== null && s.momPct < 0)
       .sort((a, b) => (a.momPct ?? 0) - (b.momPct ?? 0)),
+  };
+}
+
+/**
+ * Sales split by battery product line (MF / Quadflex / Pro LITHIUM). Input is
+ * the same gross, core-zone rowset every other page uses, so the type totals
+ * add up to the Overview page's sales figure for the same range.
+ */
+export function aggregateBatteryTypes(
+  rows: NormalizedRow[],
+  from: string,
+  to: string,
+  // Return-inclusive rowsets feeding the dealer-vs-online split (which is net).
+  net: { dealerRows: NormalizedRow[]; onlineRows: NormalizedRow[] },
+): BatteryTypeData {
+  const keys: BatteryTypeKey[] = [...BATTERY_TYPES.map(t => t.key), BATTERY_TYPE_OTHER.key];
+  const meta = new Map<BatteryTypeKey, { label: string; color: string }>([
+    ...BATTERY_TYPES.map(t => [t.key, { label: t.label, color: t.color }] as const),
+    [BATTERY_TYPE_OTHER.key, { label: BATTERY_TYPE_OTHER.label, color: BATTERY_TYPE_OTHER.color }],
+  ]);
+
+  const rangeRows = rows.filter(r => r.INV_DATE >= from && r.INV_DATE <= to);
+  // Previous period: same dates one month earlier (same convention as the SKU page)
+  const prevFrom = addMonthsPreserveDay(from, -1);
+  const prevTo = addMonthsPreserveDay(to, -1);
+  const prevRows = rows.filter(r => r.INV_DATE >= prevFrom && r.INV_DATE <= prevTo);
+
+  const totalSales = rangeRows.reduce((s, r) => s + r.NET_AMOUNT, 0);
+  const totalUnits = rangeRows.reduce((s, r) => s + r.QTY, 0);
+  const activeDealers = new Set(rangeRows.map(r => r.CUSTOMER_ID)).size;
+
+  const groupByType = (list: NormalizedRow[]) => {
+    const g = new Map<BatteryTypeKey, NormalizedRow[]>(keys.map(k => [k, []]));
+    for (const r of list) g.get(classifyBatteryType(r.ITEM_DESC))!.push(r);
+    return g;
+  };
+  const rangeByType = groupByType(rangeRows);
+  const prevByType = groupByType(prevRows);
+
+  const types: BatteryTypeRow[] = keys.map(key => {
+    const tr = rangeByType.get(key)!;
+    const sales = tr.reduce((s, r) => s + r.NET_AMOUNT, 0);
+    const units = tr.reduce((s, r) => s + r.QTY, 0);
+    const invoiceCount = new Set(tr.map(r => r.INV_NO)).size;
+    const dealerCount = new Set(tr.map(r => r.CUSTOMER_ID)).size;
+    const prevSales = prevByType.get(key)!.reduce((s, r) => s + r.NET_AMOUNT, 0);
+
+    const tierSales: Partial<Record<Tier, number>> = {};
+    const skuMap = new Map<string, { desc: string; sales: number; units: number; cases: number }>();
+    for (const r of tr) {
+      tierSales[r.Tier] = (tierSales[r.Tier] ?? 0) + r.NET_AMOUNT;
+      const s = skuMap.get(r.ITEM_ID) ?? { desc: r.ITEM_DESC, sales: 0, units: 0, cases: 0 };
+      s.sales += r.NET_AMOUNT;
+      s.units += r.QTY;
+      s.cases += r.cases;
+      skuMap.set(r.ITEM_ID, s);
+    }
+    const skus: BatteryTypeSku[] = [...skuMap.entries()]
+      .map(([itemId, s]) => ({
+        itemId, itemDesc: s.desc, model: batteryModelName(s.desc),
+        sales: s.sales, units: s.units, cases: s.cases,
+        salesPct: sales > 0 ? (s.sales / sales) * 100 : 0,
+      }))
+      .sort((a, b) => b.sales - a.sales);
+
+    return {
+      key, label: meta.get(key)!.label, color: meta.get(key)!.color,
+      sales,
+      salesPct: totalSales > 0 ? (sales / totalSales) * 100 : 0,
+      units,
+      cases: tr.reduce((s, r) => s + r.cases, 0),
+      invoiceCount,
+      avgPerInvoice: invoiceCount > 0 ? sales / invoiceCount : 0,
+      dealerCount,
+      dealerPct: activeDealers > 0 ? (dealerCount / activeDealers) * 100 : 0,
+      prevSales,
+      momPct: prevSales > 0 ? ((sales - prevSales) / prevSales) * 100 : null,
+      tierSales,
+      skus,
+    };
+  }).filter(t => t.key !== 'other' || t.sales > 0);
+
+  // Monthly mix — same 6-month window as the trend page.
+  const last6 = [...new Set(rows.map(r => r.YYYYMM))].sort().slice(-6);
+  const months: BatteryTypeMonth[] = last6.map(yyyymm => {
+    const sales = Object.fromEntries(keys.map(k => [k, 0])) as Record<BatteryTypeKey, number>;
+    let total = 0;
+    for (const r of rows) {
+      if (r.YYYYMM !== yyyymm) continue;
+      sales[classifyBatteryType(r.ITEM_DESC)] += r.NET_AMOUNT;
+      total += r.NET_AMOUNT;
+    }
+    const salesPct = Object.fromEntries(
+      keys.map(k => [k, total > 0 ? (sales[k] / total) * 100 : 0]),
+    ) as Record<BatteryTypeKey, number>;
+    return { month: yyyymm, label: formatMonthLabel(yyyymm), total, sales, salesPct };
+  });
+
+  // Dealer (core zones) vs online, per product line — NET of returns on both
+  // sides, so the columns and the total share one basis (the top of the page is
+  // gross; the page labels this section). Every line with any activity in either
+  // channel gets a row, so nothing is dropped from the all-channel total.
+  const channels = Object.values(ONLINE_ZONE_LABELS);
+  const inRange = (r: NormalizedRow) => r.INV_DATE >= from && r.INV_DATE <= to;
+  const dealerNetRows = net.dealerRows.filter(inRange);
+  const onlineNetRows = net.onlineRows.filter(inRange);
+  const dealerNetByType = groupByType(dealerNetRows);
+  const onlineNetByType = groupByType(onlineNetRows);
+
+  const splitRows: BatteryTypeChannelRow[] = keys.map(key => {
+    const dr = dealerNetByType.get(key)!;
+    const or = onlineNetByType.get(key)!;
+    const byChannel: Record<string, number> = Object.fromEntries(channels.map(c => [c, 0]));
+    for (const r of or) byChannel[ONLINE_ZONE_LABELS[r.ZONE_ID]] += r.NET_AMOUNT;
+    const onlineSales = or.reduce((s, r) => s + r.NET_AMOUNT, 0);
+    const dealerSales = dr.reduce((s, r) => s + r.NET_AMOUNT, 0);
+    const total = dealerSales + onlineSales;
+    return {
+      key, label: meta.get(key)!.label, color: meta.get(key)!.color,
+      dealerSales, onlineSales,
+      onlineUnits: or.reduce((s, r) => s + r.QTY, 0),
+      totalSales: total,
+      totalPct: 0, // filled below once the all-channel total is known
+      onlinePct: total > 0 ? (onlineSales / total) * 100 : 0,
+      byChannel,
+    };
+    // 'other' can be negative here (e.g. returns of discontinued GEL stock), so keep it whenever non-zero.
+  }).filter(r => r.key !== 'other' || r.totalSales !== 0);
+
+  const splitDealer = splitRows.reduce((s, r) => s + r.dealerSales, 0);
+  const splitOnline = splitRows.reduce((s, r) => s + r.onlineSales, 0);
+  const splitTotal = splitDealer + splitOnline;
+  for (const r of splitRows) r.totalPct = splitTotal > 0 ? (r.totalSales / splitTotal) * 100 : 0;
+  const splitByChannel: Record<string, number> = Object.fromEntries(
+    channels.map(c => [c, splitRows.reduce((s, r) => s + r.byChannel[c], 0)]),
+  );
+
+  return {
+    totalSales, totalUnits, activeDealers, types, months,
+    channelSplit: {
+      channels, rows: splitRows,
+      dealerSales: splitDealer, onlineSales: splitOnline, totalSales: splitTotal,
+      onlinePct: splitTotal > 0 ? (splitOnline / splitTotal) * 100 : 0,
+      byChannel: splitByChannel,
+      dealerReturns: sumReturns(dealerNetRows),
+      onlineReturns: sumReturns(onlineNetRows),
+    },
+  };
+}
+
+// A "real sale" row — the only rows that count toward orders/buyers/dealers.
+// Everything else in a return-inclusive rowset is a return/claim (or a zero-value
+// freebie line).
+const isSaleRow = (r: NormalizedRow) => r.QTY > 0 && r.NET_AMOUNT > 0;
+
+/** Amount deducted by returns/claims in a return-inclusive rowset, as a positive number. */
+function sumReturns(rows: NormalizedRow[]): number {
+  return -rows.filter(r => !isSaleRow(r)).reduce((s, r) => s + r.NET_AMOUNT, 0);
+}
+
+/**
+ * Online-channel sales (Lazada / Shopee / TikTok / Facebook) for [from, to],
+ * ALWAYS NET of returns/claims (user rule, 2026-09-24): pass the return-inclusive
+ * online rowset. Sales/units/cases sum every row given, so returns come off the
+ * month they are booked in; returnAmount reports what was deducted. Order and
+ * buyer counts only look at real sale rows, so a return invoice never inflates
+ * "orders" — same "counts never net" rule as the dealer counts elsewhere.
+ */
+export function aggregateOnlineSales(
+  rows: NormalizedRow[],
+  from: string,
+  to: string,
+): OnlineSalesData {
+  const prevFrom = addMonthsPreserveDay(from, -1);
+  const prevTo = addMonthsPreserveDay(to, -1);
+  const inRange = rows.filter(r => r.INV_DATE >= from && r.INV_DATE <= to);
+  const prevRows = rows.filter(r => r.INV_DATE >= prevFrom && r.INV_DATE <= prevTo);
+  const isSale = isSaleRow;
+  const sumSales = (list: NormalizedRow[]) => list.reduce((s, r) => s + r.NET_AMOUNT, 0);
+
+  const totalSales = sumSales(inRange);
+  const prevSales = sumSales(prevRows);
+
+  const channels: OnlineChannelSummary[] = Object.entries(ONLINE_ZONE_LABELS).map(([zoneId, channel]) => {
+    const cr = inRange.filter(r => r.ZONE_ID === zoneId);
+    const sales = sumSales(cr);
+    const chPrev = sumSales(prevRows.filter(r => r.ZONE_ID === zoneId));
+    const saleRows = cr.filter(isSale);
+    return {
+      zoneId, channel, sales,
+      returnAmount: sumReturns(cr),
+      salesPct: totalSales > 0 ? (sales / totalSales) * 100 : 0,
+      units: cr.reduce((s, r) => s + r.QTY, 0),
+      cases: cr.reduce((s, r) => s + r.cases, 0),
+      orderCount: new Set(saleRows.map(r => r.INV_NO)).size,
+      buyerCount: new Set(saleRows.map(r => r.CUSTOMER_ID)).size,
+      prevSales: chPrev,
+      momPct: chPrev > 0 ? ((sales - chPrev) / chPrev) * 100 : null,
+    };
+  });
+
+  const saleRows = inRange.filter(isSale);
+  return {
+    fromDate: from, toDate: to,
+    totalSales,
+    returnAmount: sumReturns(inRange),
+    totalUnits: inRange.reduce((s, r) => s + r.QTY, 0),
+    totalCases: inRange.reduce((s, r) => s + r.cases, 0),
+    orderCount: new Set(saleRows.map(r => r.INV_NO)).size,
+    buyerCount: new Set(saleRows.map(r => r.CUSTOMER_ID)).size,
+    prevSales,
+    momPct: prevSales > 0 ? ((totalSales - prevSales) / prevSales) * 100 : null,
+    channels,
   };
 }
 
@@ -960,12 +1176,19 @@ function buildZoneDealers(zoneRows: NormalizedRow[]): ZoneDealerRow[] {
 }
 
 // Sales broken down by ZONE_ID: core dealer zones the user manages directly,
-// vs. online marketplace channels (Lazada/Shopee/TikTok), vs. everything else
+// vs. online channels (Lazada/Shopee/TikTok/Facebook), vs. everything else
 // (other teams' territory, unmapped zones).
+//
+// `rows` is the gross all-zone rowset (total / core / other stay gross, as they
+// always were). Online channels are reported NET of returns, from `onlineNetRows`
+// (return-inclusive, online zones only) — see aggregateOnlineSales. Because the
+// two bases differ, the online figures are never expressed as a % of the gross
+// total.
 export function aggregateZoneSales(
   rows: NormalizedRow[],
   from: string,
-  to: string
+  to: string,
+  onlineNetRows: NormalizedRow[],
 ): ZoneSalesData {
   const monthRows = rows.filter(r => r.INV_DATE >= from && r.INV_DATE <= to);
   const totalSales = monthRows.reduce((s, r) => s + r.NET_AMOUNT, 0);
@@ -999,30 +1222,23 @@ export function aggregateZoneSales(
     })
     .sort((a, b) => b.sales - a.sales);
 
-  const onlineChannels: OnlineChannelRow[] = Object.entries(ONLINE_ZONE_LABELS)
-    .filter(([z]) => zoneMap.has(z))
-    .map(([z, channel]) => {
-      const d = zoneMap.get(z)!;
-      return {
-        zoneId: z,
-        channel,
-        sales: d.sales,
-        salesPct: totalSales > 0 ? (d.sales / totalSales) * 100 : 0,
-        units: d.units,
-        cases: d.cases,
-        orderCount: d.invoices.size,
-        buyerCount: d.dealers.size,
-      };
-    })
+  // Online, net of returns. Only channels with any activity in the range are listed.
+  const online = aggregateOnlineSales(onlineNetRows, from, to);
+  const onlineChannels: OnlineChannelRow[] = online.channels
+    .filter(c => c.sales !== 0 || c.returnAmount !== 0 || c.orderCount > 0)
     .sort((a, b) => b.sales - a.sales);
 
   const coreZoneSales = zones.reduce((s, z) => s + z.sales, 0);
-  const onlineSales = onlineChannels.reduce((s, c) => s + c.sales, 0);
-  const otherSales = totalSales - coreZoneSales - onlineSales;
+  // "Other" = whatever is in the gross total that is neither core nor online.
+  // Subtract the GROSS online amount here — subtracting the net one would leak
+  // the online returns into "other".
+  const onlineGross = ONLINE_ZONE_IDS.reduce((s, z) => s + (zoneMap.get(z)?.sales ?? 0), 0);
+  const otherSales = totalSales - coreZoneSales - onlineGross;
 
   return {
-    totalSales, coreZoneSales, onlineSales, otherSales,
-    onlinePctOfTotal: totalSales > 0 ? (onlineSales / totalSales) * 100 : 0,
+    totalSales, coreZoneSales, otherSales,
+    onlineSales: online.totalSales,
+    onlineReturns: online.returnAmount,
     zones, onlineChannels,
   };
 }

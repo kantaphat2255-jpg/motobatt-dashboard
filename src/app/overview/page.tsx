@@ -10,6 +10,7 @@ import DateRangePicker from '@/components/ui/DateRangePicker';
 import TrendBadge from '@/components/ui/TrendBadge';
 import { formatCurrency, formatNumber, formatCurrencyShort } from '@/lib/utils';
 import { formatDateRangeThai } from '@/lib/dateRange';
+import { ONLINE_CHANNEL_COLORS } from '@/lib/constants';
 import { Loader2, AlertCircle } from 'lucide-react';
 
 function OverviewContent() {
@@ -52,6 +53,19 @@ function OverviewContent() {
   const salesDelta = cmp && cmp.mtdSales > 0 ? ((ov.mtdSales - cmp.mtdSales) / cmp.mtdSales) * 100 : null;
   const returnsAmount = overview.mtdSales - overviewNet.mtdSales;
 
+  // Online sales are ALWAYS net of returns (user rule) — independent of the
+  // Gross/Net toggle above, which only drives the dealer figures. The all-channel
+  // share bar therefore uses NET dealer sales as well, so its two segments share
+  // one basis instead of mixing gross dealers with net online.
+  const on = data.online;
+  const onCmp = data.onlineCompare;
+  const pctDelta = (cur: number, prev: number | undefined) => (prev && prev > 0 ? ((cur - prev) / prev) * 100 : null);
+  const onlineDelta = onCmp ? pctDelta(on.totalSales, onCmp.totalSales) : on.momPct;
+  const onlineBeforeReturns = on.totalSales + on.returnAmount;
+  const allChannelSales = overviewNet.mtdSales + on.totalSales;
+  const onlineShare = allChannelSales > 0 ? (on.totalSales / allChannelSales) * 100 : 0;
+  const dealerShare = allChannelSales > 0 ? 100 - onlineShare : 0;
+
   return (
     <>
       <DataFreshness meta={meta} onRefresh={refresh} loading={loading} />
@@ -81,7 +95,7 @@ function OverviewContent() {
           <div className="flex items-start justify-between mb-4">
             <div>
               <div className="flex items-center gap-3 mb-1">
-                <p className="text-xs text-gray-400 uppercase tracking-wide">ยอดขายในช่วง</p>
+                <p className="text-xs text-gray-400 uppercase tracking-wide">ยอดขายในช่วง (ดีลเลอร์)</p>
                 <div className="flex rounded-md border border-[#2A2F36] overflow-hidden text-[11px]">
                   <button
                     type="button"
@@ -209,6 +223,87 @@ function OverviewContent() {
             />
           </div>
         )}
+
+        {/* Online sales */}
+        <section className="space-y-4 pt-2">
+          <div>
+            <h2 className="text-lg font-bold text-white">ยอดขายออนไลน์</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Lazada · Shopee · TikTok · Facebook (โซน 80-01 ถึง 80-04) แยกจากยอดดีลเลอร์ด้านบน · แสดงแบบ Net (หักคืนสินค้า/เคลมแล้ว) เสมอ ไม่ขึ้นกับปุ่ม Gross/Net
+            </p>
+          </div>
+
+          <div className="rounded-lg border border-[#343A43] bg-[#17191C]/95 p-5 shadow-[0_22px_60px_rgba(0,0,0,0.24)]">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs text-gray-400 uppercase tracking-wide mb-1">ยอดขายออนไลน์รวม (Net)</p>
+                <p className="text-3xl font-bold text-[#F5C400] tabular-nums leading-none">{formatCurrency(on.totalSales)}</p>
+                <p className="text-sm text-gray-500 mt-2 tabular-nums">
+                  {on.returnAmount > 0
+                    ? <>ก่อนหักคืน {formatCurrency(onlineBeforeReturns)} · <span className="text-red-400">หักคืนสินค้า/เคลม −{formatCurrency(on.returnAmount)}</span></>
+                    : 'ไม่มีรายการคืนสินค้า/เคลมในช่วงนี้'}
+                </p>
+                <p className="text-sm text-gray-500 mt-1 tabular-nums">
+                  {formatNumber(on.totalUnits)} ชิ้น · {formatNumber(on.orderCount)} ออเดอร์ · {formatNumber(on.buyerCount)} ผู้ซื้อ
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-gray-400 mb-1">
+                  {onCmp && compareRange ? `เทียบ ${formatDateRangeThai(compareRange.from, compareRange.to)}` : 'เทียบช่วงก่อนหน้า'}
+                </p>
+                <TrendBadge pct={onlineDelta} size="md" />
+                <p className="text-xs text-gray-500 mt-1 tabular-nums">
+                  ก่อนหน้า {formatCurrencyShort(onCmp ? onCmp.totalSales : on.prevSales)}
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5">
+              <div className="flex items-baseline justify-between text-xs text-gray-400 mb-2">
+                <span>สัดส่วนยอดขายทุกช่องทาง (Net: ดีลเลอร์ + ออนไลน์ หักคืนทั้งคู่)</span>
+                <span className="tabular-nums text-gray-300">{formatCurrency(allChannelSales)}</span>
+              </div>
+              <div className="flex h-3 rounded-md overflow-hidden bg-[#2A2A2A]">
+                <div style={{ width: `${dealerShare}%`, background: '#F5C400' }} title={`ดีลเลอร์ ${dealerShare.toFixed(1)}%`} />
+                <div style={{ width: `${onlineShare}%`, background: '#38BDF8' }} title={`ออนไลน์ ${onlineShare.toFixed(1)}%`} />
+              </div>
+              <div className="flex gap-6 mt-2 text-xs text-gray-400">
+                <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#F5C400]" />ดีลเลอร์ <span className="tabular-nums text-gray-300">{dealerShare.toFixed(1)}%</span></span>
+                <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#38BDF8]" />ออนไลน์ <span className="tabular-nums text-gray-300">{onlineShare.toFixed(1)}%</span></span>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {on.channels.map(c => {
+              const cmpCh = onCmp?.channels.find(x => x.zoneId === c.zoneId);
+              const delta = onCmp ? pctDelta(c.sales, cmpCh?.sales) : c.momPct;
+              const color = ONLINE_CHANNEL_COLORS[c.channel] ?? '#6B7280';
+              return (
+                <div
+                  key={c.zoneId}
+                  className="rounded-lg border border-[#2A2F36] bg-[#17191C]/92 p-4"
+                  style={{ borderLeftColor: color, borderLeftWidth: 3 }}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs uppercase tracking-wide" style={{ color }}>{c.channel}</p>
+                    <TrendBadge pct={delta} />
+                  </div>
+                  <p className="text-xl font-bold tabular-nums">{c.sales !== 0 ? formatCurrency(c.sales) : '—'}</p>
+                  <p className="text-xs text-gray-500 mt-1 tabular-nums">
+                    {c.sales !== 0 ? `${c.salesPct.toFixed(1)}% ของยอดออนไลน์` : 'ไม่มียอดขายในช่วงนี้'}
+                  </p>
+                  {c.returnAmount > 0 && (
+                    <p className="text-xs text-red-400 mt-1 tabular-nums">หักคืนสินค้า −{formatCurrency(c.returnAmount)}</p>
+                  )}
+                  <p className="mt-2 text-xs text-gray-500 tabular-nums">
+                    {formatNumber(c.orderCount)} ออเดอร์ · {formatNumber(c.units)} ชิ้น
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       </div>
     </>
   );

@@ -173,16 +173,119 @@ export interface TrendData {
   cumulativeTarget: number;
 }
 
+// --- Battery Type (MF / Quadflex / Pro LITHIUM) ---
+export type BatteryTypeKey = 'mf' | 'quadflex' | 'lithium' | 'other';
+
+export interface BatteryTypeSku {
+  itemId: string;
+  itemDesc: string;
+  model: string;      // model code only, e.g. 'YTZ5S'
+  sales: number;
+  units: number;
+  cases: number;
+  salesPct: number;   // % of this type's sales
+}
+
+export interface BatteryTypeRow {
+  key: BatteryTypeKey;
+  label: string;
+  color: string;
+  sales: number;
+  salesPct: number;        // % of all battery sales in range
+  units: number;
+  cases: number;
+  invoiceCount: number;
+  avgPerInvoice: number;
+  dealerCount: number;     // distinct dealers who bought this type (overlaps across types)
+  dealerPct: number;       // dealerCount / all active dealers in range
+  prevSales: number;
+  momPct: number | null;
+  tierSales: Partial<Record<Tier, number>>;
+  skus: BatteryTypeSku[];
+}
+
+export interface BatteryTypeMonth {
+  month: string;
+  label: string;
+  total: number;
+  sales: Record<BatteryTypeKey, number>;
+  salesPct: Record<BatteryTypeKey, number>;
+}
+
+// One product line across sales channels: dealers (core zones) vs each online channel.
+export interface BatteryTypeChannelRow {
+  key: BatteryTypeKey;
+  label: string;
+  color: string;
+  dealerSales: number;
+  onlineSales: number;
+  onlineUnits: number;
+  totalSales: number;               // dealer + online
+  totalPct: number;                 // share of the all-channel total
+  onlinePct: number;                // online share within this line
+  byChannel: Record<string, number>; // online channel label -> sales
+}
+
+// NET of returns/claims for every channel in this split (dealers included, so
+// the columns never mix bases). dealerReturns/onlineReturns are the amounts that
+// were deducted, shown as positive numbers.
+export interface BatteryTypeChannelSplit {
+  channels: string[];               // online channel labels, display order
+  rows: BatteryTypeChannelRow[];
+  dealerSales: number;
+  onlineSales: number;
+  totalSales: number;
+  onlinePct: number;
+  byChannel: Record<string, number>;
+  dealerReturns: number;
+  onlineReturns: number;
+}
+
+export interface BatteryTypeData {
+  totalSales: number;            // dealer (core-zone) scope, same as Overview
+  totalUnits: number;
+  activeDealers: number;
+  types: BatteryTypeRow[];       // mf, quadflex, lithium always; 'other' only if it has sales
+  months: BatteryTypeMonth[];    // last 6 months of data (same window as the trend page)
+  channelSplit: BatteryTypeChannelSplit;
+}
+
+// --- Online sales (Lazada / Shopee / TikTok / Facebook) ---
+export interface OnlineChannelSummary extends OnlineChannelRow {
+  prevSales: number;
+  momPct: number | null;
+}
+
+// Online sales are always NET of returns/claims (user rule, 2026-09-24): sales
+// and units include return rows (negative), returnAmount is what was deducted
+// (positive). Order/buyer counts only look at real sale rows.
+export interface OnlineSalesData {
+  fromDate: string;
+  toDate: string;
+  totalSales: number;
+  returnAmount: number;
+  totalUnits: number;
+  totalCases: number;
+  orderCount: number;
+  buyerCount: number;
+  prevSales: number;               // same dates one month earlier
+  momPct: number | null;
+  channels: OnlineChannelSummary[]; // every channel, fixed order, zero-sales ones included
+}
+
 export interface DashboardApiResponse {
   meta: DataMeta;
   overview: MonthlyOverviewData;
   overviewCompare: MonthlyOverviewData | null;
   overviewNet: MonthlyOverviewData;
   overviewNetCompare: MonthlyOverviewData | null;
+  online: OnlineSalesData;                 // always net of returns
+  onlineCompare: OnlineSalesData | null;
   compareRange: { from: string; to: string } | null;
   tierAnalysis: TierAnalysisData;
   billSizeDistribution: BillSizeDistributionData;
   skuBreakdown: SkuBreakdownData;
+  batteryTypes: BatteryTypeData;
   dealerHealth: DealerHealthData;
   trend: TrendData;
 }
@@ -401,10 +504,14 @@ export interface ZoneBreakdownRow {
   dealers: ZoneDealerRow[];
 }
 
+// Online channels are NET of returns: sales/units/cases include return rows,
+// returnAmount is the (positive) amount deducted, salesPct is the share of the
+// online net total. orderCount/buyerCount only count real sale rows.
 export interface OnlineChannelRow {
   zoneId: string;
   channel: string;
   sales: number;
+  returnAmount: number;
   salesPct: number;
   units: number;
   cases: number;
@@ -412,12 +519,15 @@ export interface OnlineChannelRow {
   buyerCount: number;
 }
 
+// totalSales / coreZoneSales / otherSales are gross, as before. onlineSales is
+// NET of returns (onlineReturns = what was deducted), so it is deliberately not
+// expressed as a % of totalSales — that would divide a net figure by a gross one.
 export interface ZoneSalesData {
   totalSales: number;
   coreZoneSales: number;
   onlineSales: number;
+  onlineReturns: number;
   otherSales: number;
-  onlinePctOfTotal: number;
   zones: ZoneBreakdownRow[];
   onlineChannels: OnlineChannelRow[];
 }

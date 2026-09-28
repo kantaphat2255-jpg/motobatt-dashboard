@@ -65,19 +65,37 @@ export const ONLINE_ZONE_LABELS: Record<string, string> = {
   '80-01': 'Lazada',
   '80-02': 'Shopee',
   '80-03': 'TikTok',
+  '80-04': 'Facebook',
 };
 
 export const ONLINE_CHANNEL_COLORS: Record<string, string> = {
   Lazada: '#F97316',
   Shopee: '#F43F5E',
   TikTok: '#22D3EE',
+  Facebook: '#3B82F6',
 };
+
+// Single source of truth for "is this an online zone" — the core-zone exclusion
+// below is derived from it, so adding a channel to ONLINE_ZONE_LABELS can never
+// leave it silently counted as dealer sales.
+export const ONLINE_ZONE_IDS = Object.keys(ONLINE_ZONE_LABELS);
 
 // Zones excluded from every "core business" aggregation (sales, tier, sku,
 // dealer counts, etc.) — online marketplace channels plus the other team's
 // territory. Only the Zone Sales page bypasses this, since its job is to show
 // exactly what's happening in these zones.
-export const EXCLUDED_ZONE_IDS = ['80-01', '80-02', '80-03', '40-70'];
+export const EXCLUDED_ZONE_IDS = [...ONLINE_ZONE_IDS, '40-70'];
+
+// Battery product lines shown on the Battery Type page. Order = display order.
+// 'other' is a catch-all for battery items matching none of the three (see
+// classifyBatteryType) — only shown when it actually has sales in the range.
+export const BATTERY_TYPES = [
+  { key: 'mf', label: 'Motobatt MF', color: '#F5C400' },
+  { key: 'quadflex', label: 'Motobatt Quadflex', color: '#38BDF8' },
+  { key: 'lithium', label: 'Motobatt Pro LITHIUM', color: '#F472B6' },
+] as const;
+
+export const BATTERY_TYPE_OTHER = { key: 'other', label: 'อื่นๆ (ไม่จัดประเภท)', color: '#6B7280' } as const;
 
 export const BILL_SIZE_RANGES = [
   { label: 'น้อยกว่า 3,000', min: 0, max: 3000 },

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchSheetsData, getCacheTimestamp } from '@/lib/sheets';
 import { normalizeDataRows, normalizeDealerRows } from '@/lib/data/normalize';
-import { applyBaseFilters, applyBaseFiltersInclReturns, applyNewDealerFilters, filterCoreZones } from '@/lib/data/filters';
+import { applyBaseFilters, applyBaseFiltersInclReturns, applyNewDealerFilters, filterCoreZones, filterOnlineZones } from '@/lib/data/filters';
 import { joinDealerTier } from '@/lib/data/join';
 import {
   aggregateMonthlyOverview, aggregateTierAnalysis, aggregateBillSizeDistribution,
-  aggregateSkuBreakdown, aggregateDealerHealth, aggregateTrend,
+  aggregateSkuBreakdown, aggregateBatteryTypes, aggregateOnlineSales, aggregateDealerHealth, aggregateTrend,
 } from '@/lib/data/aggregations';
 import { yyyymmToRange, defaultRange } from '@/lib/dateRange';
 import type { DashboardApiResponse } from '@/lib/types';
@@ -39,6 +39,13 @@ export async function GET(req: NextRequest) {
     // Net-of-returns rowset, core zones only, for the opt-in Overview toggle.
     const netFiltered = filterCoreZones(applyBaseFiltersInclReturns(parsedRows));
     const { rows: normalizedNetRows } = joinDealerTier(netFiltered, dealers);
+
+    // Online channels (Lazada/Shopee/TikTok/Facebook): the zones filterCoreZones
+    // drops from everything above. Online sales are ALWAYS net of returns (user
+    // rule), so only the return-inclusive rowset is built. Online buyers aren't in
+    // the dealer master, so their tier-join misses are expected and deliberately
+    // kept out of meta.
+    const { rows: onlineNetRows } = joinDealerTier(filterOnlineZones(applyBaseFiltersInclReturns(parsedRows)), dealers);
 
     const availableMonths = [...new Set(normalizedRows.map(r => r.YYYYMM))].sort();
     const latestMonth = availableMonths[availableMonths.length - 1] || '';
@@ -91,10 +98,13 @@ export async function GET(req: NextRequest) {
       overviewCompare,
       overviewNet,
       overviewNetCompare,
+      online: aggregateOnlineSales(onlineNetRows, from, to),
+      onlineCompare: hasCompare ? aggregateOnlineSales(onlineNetRows, cfrom!, cto!) : null,
       compareRange: hasCompare ? { from: cfrom!, to: cto! } : null,
       tierAnalysis: aggregateTierAnalysis(normalizedRows, from, to),
       billSizeDistribution: aggregateBillSizeDistribution(normalizedRows, from, to),
       skuBreakdown: aggregateSkuBreakdown(normalizedRows, from, to),
+      batteryTypes: aggregateBatteryTypes(normalizedRows, from, to, { dealerRows: normalizedNetRows, onlineRows: onlineNetRows }),
       dealerHealth: aggregateDealerHealth(normalizedRows, allBatteryDomestic, from, to),
       trend: aggregateTrend(normalizedRows),
     };

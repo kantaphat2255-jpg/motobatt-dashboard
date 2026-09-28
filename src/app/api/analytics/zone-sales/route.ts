@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchSheetsData, getCacheTimestamp } from '@/lib/sheets';
 import { normalizeDataRows, normalizeDealerRows } from '@/lib/data/normalize';
-import { applyBaseFilters } from '@/lib/data/filters';
+import { applyBaseFilters, applyBaseFiltersInclReturns, filterOnlineZones } from '@/lib/data/filters';
 import { joinDealerTier } from '@/lib/data/join';
 import { aggregateZoneSales } from '@/lib/data/aggregations';
 import { yyyymmToRange, defaultRange } from '@/lib/dateRange';
@@ -31,6 +31,9 @@ export async function GET(req: NextRequest) {
 
     const baseFiltered = applyBaseFilters(parsedRows);
     const { rows: normalizedRows, failedIds } = joinDealerTier(baseFiltered, dealers);
+
+    // Online channels are reported net of returns (user rule); zones stay gross.
+    const { rows: onlineNetRows } = joinDealerTier(filterOnlineZones(applyBaseFiltersInclReturns(parsedRows)), dealers);
 
     const availableMonths = [...new Set(normalizedRows.map(r => r.YYYYMM))].sort();
     const latestMonth = availableMonths[availableMonths.length - 1] || '';
@@ -66,8 +69,8 @@ export async function GET(req: NextRequest) {
 
     const response: ZoneSalesApiResponse = {
       meta,
-      data: aggregateZoneSales(normalizedRows, from, to),
-      dataCompare: hasCompare ? aggregateZoneSales(normalizedRows, cfrom!, cto!) : null,
+      data: aggregateZoneSales(normalizedRows, from, to, onlineNetRows),
+      dataCompare: hasCompare ? aggregateZoneSales(normalizedRows, cfrom!, cto!, onlineNetRows) : null,
       compareRange: hasCompare ? { from: cfrom!, to: cto! } : null,
     };
 

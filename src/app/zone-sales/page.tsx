@@ -192,8 +192,9 @@ function ZoneSalesContent() {
         {/* Summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <MetricCard
-            title="ยอดขายรวม"
+            title="ยอดขายรวม (Gross)"
             value={formatCurrency(ds.totalSales)}
+            subtitle="ก่อนหักคืนสินค้า"
             badge={dc && <TrendBadge pct={totalDelta} />}
           />
           <MetricCard
@@ -204,9 +205,9 @@ function ZoneSalesContent() {
             highlight
           />
           <MetricCard
-            title="ออนไลน์"
+            title="ออนไลน์ (Net)"
             value={formatCurrency(ds.onlineSales)}
-            subtitle={`${ds.onlinePctOfTotal.toFixed(1)}% ของยอดรวม`}
+            subtitle={ds.onlineReturns > 0 ? `หักคืนสินค้า −${formatCurrency(ds.onlineReturns)} แล้ว` : 'ไม่มีรายการคืนสินค้า'}
             badge={dc && <TrendBadge pct={onlineDelta} />}
           />
           <MetricCard
@@ -284,11 +285,14 @@ function ZoneSalesContent() {
 
         {/* Online channels */}
         <div className="bg-[#1C1C1C] border border-[#2A2A2A] rounded-xl p-5">
-          <h2 className="text-sm font-semibold text-gray-300 mb-4">ช่องทางออนไลน์</h2>
+          <h2 className="text-sm font-semibold text-gray-300 mb-1">ช่องทางออนไลน์ (Net — หักคืนสินค้า/เคลมแล้ว)</h2>
+          <p className="text-xs text-gray-500 mb-4">
+            ยอดออนไลน์หักคืนสินค้าเสมอ ส่วนยอดรวม เขตหลัก และอื่นๆ ด้านบนเป็น Gross จึงไม่แสดงออนไลน์เป็น % ของยอดรวม
+          </p>
           {ds.onlineChannels.length === 0 ? (
             <p className="text-gray-500 text-sm py-4">ไม่มียอดขายออนไลน์ในช่วงที่เลือก</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
               {ds.onlineChannels.map(c => (
                 <div
                   key={c.zoneId}
@@ -302,7 +306,10 @@ function ZoneSalesContent() {
                     {dc && <TrendBadge pct={pctDelta(c.sales, channelCompareMap.get(c.zoneId)?.sales)} />}
                   </div>
                   <p className="text-xl font-bold tabular-nums">{formatCurrency(c.sales)}</p>
-                  <p className="text-sm text-gray-400 mt-1 tabular-nums">{c.salesPct.toFixed(1)}% ของยอดรวม</p>
+                  <p className="text-sm text-gray-400 mt-1 tabular-nums">{c.salesPct.toFixed(1)}% ของยอดออนไลน์</p>
+                  {c.returnAmount > 0 && (
+                    <p className="text-xs text-red-400 mt-1 tabular-nums">หักคืนสินค้า −{formatCurrency(c.returnAmount)}</p>
+                  )}
                   <div className="mt-3 pt-3 border-t border-[#2A2A2A] grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <p className="text-gray-500">ผู้ซื้อ</p>
