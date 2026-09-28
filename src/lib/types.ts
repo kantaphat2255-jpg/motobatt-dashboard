@@ -76,13 +76,21 @@ export interface TierSummary {
   dealerCount: number;
   avgSalesPerDealer: number;
   belowAvgCount: number;
+  atAvgCount: number;
   aboveAvgCount: number;
+  dealers: TierDealerRow[];
   prevSales: number;
   salesMomPct: number | null;
   prevDealerCount: number;
   dealerCountMomPct: number | null;
   avgPrevSalesPerDealer: number;
   avgMomPct: number | null;
+}
+
+export interface TierDealerRow {
+  customerId: string;
+  customerName: string;
+  sales: number;
 }
 
 export interface UnknownTierDealer {

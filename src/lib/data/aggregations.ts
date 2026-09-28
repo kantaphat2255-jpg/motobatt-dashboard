@@ -1,6 +1,6 @@
 import type {
   NormalizedRow, RawDataRow, Tier, TierKnown,
-  MonthlyOverviewData, TierAnalysisData, TierSummary, OrderSizeRow,
+  MonthlyOverviewData, TierAnalysisData, TierSummary, TierDealerRow, OrderSizeRow,
   BillSizeDistributionData, BillSizeRow,
   SkuBreakdownData, SkuData, DealerHealthData, DealerInfo,
   TrendData, TrendMonthData,
@@ -124,7 +124,7 @@ export function aggregateTierAnalysis(
   const totalSales = monthRows.reduce((s, r) => s + r.NET_AMOUNT, 0);
 
   const tierMap = new Map<Tier, { sales: number; dealers: Set<string> }>();
-  const dealerSalesByTier = new Map<Tier, Map<string, number>>();
+  const dealerSalesByTier = new Map<Tier, Map<string, { customerName: string; sales: number }>>();
   for (const r of monthRows) {
     if (!tierMap.has(r.Tier)) tierMap.set(r.Tier, { sales: 0, dealers: new Set() });
     const t = tierMap.get(r.Tier)!;
@@ -132,7 +132,9 @@ export function aggregateTierAnalysis(
     t.dealers.add(r.CUSTOMER_ID);
     if (!dealerSalesByTier.has(r.Tier)) dealerSalesByTier.set(r.Tier, new Map());
     const ds = dealerSalesByTier.get(r.Tier)!;
-    ds.set(r.CUSTOMER_ID, (ds.get(r.CUSTOMER_ID) ?? 0) + r.NET_AMOUNT);
+    const existing = ds.get(r.CUSTOMER_ID);
+    if (existing) existing.sales += r.NET_AMOUNT;
+    else ds.set(r.CUSTOMER_ID, { customerName: r.CUSTOMER_NAME, sales: r.NET_AMOUNT });
   }
 
   // Comparison period: an explicit range from the date picker when the user turned
@@ -165,17 +167,25 @@ export function aggregateTierAnalysis(
       const prevDealerCount = cmp?.dealers.size ?? 0;
       const avgPrevSalesPerDealer = prevDealerCount > 0 ? prevSales / prevDealerCount : 0;
 
-      // How many dealers in this tier sold below/above the tier's own average —
+      // How many dealers in this tier sold below/at/above the tier's own average —
       // shows whether the average is pulled up by a few big accounts or is broadly
-      // representative. Dealers selling exactly the average land in neither count.
+      // representative. "At" uses whole-baht rounding so float division noise (e.g.
+      // 1000.0000000002) doesn't split ties that are really equal into below/above.
       let belowAvgCount = 0;
+      let atAvgCount = 0;
       let aboveAvgCount = 0;
       const dealerSales = dealerSalesByTier.get(t);
+      const dealerRows: TierDealerRow[] = [];
+      const roundedAvg = Math.round(avgSalesPerDealer);
       if (dealerSales && avgSalesPerDealer > 0) {
-        for (const dealerTotal of dealerSales.values()) {
-          if (dealerTotal < avgSalesPerDealer) belowAvgCount++;
-          else if (dealerTotal > avgSalesPerDealer) aboveAvgCount++;
+        for (const [customerId, d] of dealerSales) {
+          const roundedSales = Math.round(d.sales);
+          if (roundedSales < roundedAvg) belowAvgCount++;
+          else if (roundedSales > roundedAvg) aboveAvgCount++;
+          else atAvgCount++;
+          dealerRows.push({ customerId, customerName: d.customerName, sales: d.sales });
         }
+        dealerRows.sort((a, b) => b.sales - a.sales);
       }
 
       return {
@@ -185,7 +195,9 @@ export function aggregateTierAnalysis(
         dealerCount,
         avgSalesPerDealer,
         belowAvgCount,
+        atAvgCount,
         aboveAvgCount,
+        dealers: dealerRows,
         prevSales,
         salesMomPct: pct(sales, prevSales),
         prevDealerCount,

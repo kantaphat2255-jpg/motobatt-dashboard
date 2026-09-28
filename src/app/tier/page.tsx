@@ -1,18 +1,74 @@
 'use client';
 
 import { useSearchParams, useRouter } from 'next/navigation';
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { useDashboard } from '@/hooks/useDashboard';
 import DataFreshness from '@/components/layout/DataFreshness';
 import WarningBanner from '@/components/ui/WarningBanner';
 import DateRangePicker from '@/components/ui/DateRangePicker';
 import TrendBadge from '@/components/ui/TrendBadge';
 import TierBarChart from '@/components/charts/TierBarChart';
-import { formatCurrency, formatNumber } from '@/lib/utils';
+import { formatCurrency, formatNumber, formatPct, pctColor } from '@/lib/utils';
 import { formatDateRangeThai } from '@/lib/dateRange';
 import { TIER_COLORS, TIER_LABELS } from '@/lib/constants';
-import type { TierKnown } from '@/lib/types';
-import { Loader2, AlertCircle } from 'lucide-react';
+import type { Tier, TierKnown, TierSummary } from '@/lib/types';
+import { Loader2, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+
+function TierDealerDetail({ tier }: { tier: TierSummary }) {
+  const avg = tier.avgSalesPerDealer;
+  return (
+    <div className="bg-[#1C1C1C] border border-[#2A2A2A] rounded-xl p-5">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="text-sm font-semibold" style={{ color: TIER_COLORS[tier.tier] }}>
+          รายละเอียดเทียร์ {TIER_LABELS[tier.tier]} — รายร้าน
+        </h2>
+        <p className="text-xs text-gray-500">
+          เฉลี่ย <span className="text-white font-medium tabular-nums">{formatCurrency(avg)}</span>/ราย
+        </p>
+      </div>
+      <p className="text-xs text-gray-500 mb-4">
+        ต่ำกว่าเฉลี่ย <span className="text-red-400 font-medium tabular-nums">{tier.belowAvgCount}</span> ราย ·
+        {' '}เท่ากับเฉลี่ย <span className="text-gray-300 font-medium tabular-nums">{tier.atAvgCount}</span> ราย ·
+        {' '}สูงกว่าเฉลี่ย <span className="text-green-400 font-medium tabular-nums">{tier.aboveAvgCount}</span> ราย
+      </p>
+      <div className="overflow-x-auto max-h-96 overflow-y-auto">
+        <table className="w-full text-sm">
+          <thead className="sticky top-0 bg-[#1C1C1C]">
+            <tr className="text-gray-500 text-xs border-b border-[#2A2A2A]">
+              <th className="text-left py-1.5 pr-4 font-medium">รหัส</th>
+              <th className="text-left py-1.5 pr-4 font-medium">ชื่อร้าน</th>
+              <th className="text-right py-1.5 px-4 font-medium">ยอดขาย</th>
+              <th className="text-right py-1.5 pl-4 font-medium">เทียบเฉลี่ย</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tier.dealers.map(d => {
+              const diff = d.sales - avg;
+              const diffPct = avg > 0 ? (diff / avg) * 100 : null;
+              const roundedDiff = Math.round(d.sales) - Math.round(avg);
+              const label = roundedDiff === 0 ? 'เท่ากับเฉลี่ย' : roundedDiff > 0 ? 'สูงกว่าเฉลี่ย' : 'ต่ำกว่าเฉลี่ย';
+              return (
+                <tr key={d.customerId} className="border-t border-[#1A1A1A] hover:bg-[#242424]">
+                  <td className="py-1.5 pr-4 text-gray-400 tabular-nums text-xs whitespace-nowrap">{d.customerId}</td>
+                  <td className="py-1.5 pr-4 text-white whitespace-nowrap">{d.customerName || '—'}</td>
+                  <td className="py-1.5 px-4 text-right tabular-nums font-medium">{formatCurrency(d.sales)}</td>
+                  <td className="py-1.5 pl-4 text-right whitespace-nowrap">
+                    <span className={`text-xs ${pctColor(roundedDiff === 0 ? 0 : diff)}`}>{label}</span>
+                    {roundedDiff !== 0 && (
+                      <span className={`ml-1.5 text-xs tabular-nums ${pctColor(diff)}`}>
+                        ({diff >= 0 ? '+' : ''}{formatCurrency(diff)}{diffPct !== null ? `, ${formatPct(diffPct)}` : ''})
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
 function TierContent() {
   const searchParams = useSearchParams();
@@ -22,6 +78,7 @@ function TierContent() {
   const cfrom = searchParams.get('cfrom');
   const cto = searchParams.get('cto');
   const { data, loading, error, refresh } = useDashboard(from, to, cfrom, cto);
+  const [expandedTier, setExpandedTier] = useState<Tier | null>(null);
 
   const handleChange = (f: string, t: string, compare: { from: string; to: string } | null) => {
     const p = new URLSearchParams({ from: f, to: t });
@@ -71,47 +128,67 @@ function TierContent() {
         {/* Tier Cards */}
         <p className="text-xs text-gray-500">{compareLabel}</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {knownTiers.map(t => (
-            <div
-              key={t.tier}
-              className="bg-[#1C1C1C] border border-[#2A2A2A] rounded-xl p-4"
-              style={{ borderLeftColor: TIER_COLORS[t.tier], borderLeftWidth: 3 }}
-            >
-              <p className="text-xs text-gray-400 mb-2 uppercase tracking-wide" style={{ color: TIER_COLORS[t.tier] }}>
-                {TIER_LABELS[t.tier]}
-              </p>
-              <div className="flex items-baseline gap-2">
-                <p className="text-xl font-bold tabular-nums">{formatCurrency(t.sales)}</p>
-                <TrendBadge pct={t.salesMomPct} />
-              </div>
-              <p className="text-sm text-gray-400 mt-1 tabular-nums">{t.salesPct.toFixed(1)}% ของยอดรวม</p>
-              <div className="mt-3 pt-3 border-t border-[#2A2A2A] grid grid-cols-2 gap-2 text-xs">
-                <div>
-                  <p className="text-gray-500">ดีลเลอร์</p>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-white font-semibold tabular-nums">{t.dealerCount} ราย</p>
-                    <TrendBadge pct={t.dealerCountMomPct} />
+          {knownTiers.map(t => {
+            const expanded = expandedTier === t.tier;
+            return (
+              <button
+                key={t.tier}
+                type="button"
+                onClick={() => setExpandedTier(expanded ? null : t.tier)}
+                className={`text-left bg-[#1C1C1C] border rounded-xl p-4 cursor-pointer transition-colors ${
+                  expanded ? 'border-[#F5C400]/60' : 'border-[#2A2A2A] hover:border-[#3B424C]'
+                }`}
+                style={{ borderLeftColor: TIER_COLORS[t.tier], borderLeftWidth: 3 }}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs text-gray-400 uppercase tracking-wide" style={{ color: TIER_COLORS[t.tier] }}>
+                    {TIER_LABELS[t.tier]}
+                  </p>
+                  {expanded ? <ChevronUp size={14} className="text-gray-500" /> : <ChevronDown size={14} className="text-gray-500" />}
+                </div>
+                <div className="flex items-baseline gap-2">
+                  <p className="text-xl font-bold tabular-nums">{formatCurrency(t.sales)}</p>
+                  <TrendBadge pct={t.salesMomPct} />
+                </div>
+                <p className="text-sm text-gray-400 mt-1 tabular-nums">{t.salesPct.toFixed(1)}% ของยอดรวม</p>
+                <div className="mt-3 pt-3 border-t border-[#2A2A2A] grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <p className="text-gray-500">ดีลเลอร์</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-white font-semibold tabular-nums">{t.dealerCount} ราย</p>
+                      <TrendBadge pct={t.dealerCountMomPct} />
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <p className="text-gray-500">เฉลี่ย/ราย</p>
-                  <div className="flex items-center gap-1.5">
-                    <p className="text-white font-semibold tabular-nums">{formatCurrency(t.avgSalesPerDealer)}</p>
-                    <TrendBadge pct={t.avgMomPct} />
+                  <div>
+                    <p className="text-gray-500">เฉลี่ย/ราย</p>
+                    <div className="flex items-center gap-1.5">
+                      <p className="text-white font-semibold tabular-nums">{formatCurrency(t.avgSalesPerDealer)}</p>
+                      <TrendBadge pct={t.avgMomPct} />
+                    </div>
                   </div>
+                  <div className="col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1 pt-1">
+                    <span className="text-gray-500">
+                      ต่ำกว่า <span className="text-red-400 font-semibold tabular-nums">{t.belowAvgCount}</span> ราย
+                    </span>
+                    <span className="text-gray-500">
+                      เท่ากับ <span className="text-gray-300 font-semibold tabular-nums">{t.atAvgCount}</span> ราย
+                    </span>
+                    <span className="text-gray-500">
+                      สูงกว่า <span className="text-green-400 font-semibold tabular-nums">{t.aboveAvgCount}</span> ราย
+                    </span>
+                  </div>
+                  <p className="col-span-2 text-[11px] text-[#F5C400]/80 pt-1">
+                    {expanded ? 'ซ่อนรายละเอียด' : 'กดดูรายชื่อร้าน →'}
+                  </p>
                 </div>
-                <div className="col-span-2 flex items-center gap-3 pt-1">
-                  <span className="text-gray-500">
-                    ต่ำกว่าเฉลี่ย <span className="text-red-400 font-semibold tabular-nums">{t.belowAvgCount}</span> ราย
-                  </span>
-                  <span className="text-gray-500">
-                    สูงกว่าเฉลี่ย <span className="text-green-400 font-semibold tabular-nums">{t.aboveAvgCount}</span> ราย
-                  </span>
-                </div>
-              </div>
-            </div>
-          ))}
+              </button>
+            );
+          })}
         </div>
+
+        {expandedTier && knownTiers.find(t => t.tier === expandedTier) && (
+          <TierDealerDetail tier={knownTiers.find(t => t.tier === expandedTier)!} />
+        )}
 
         {unknownTier && (
           <div className="bg-amber-500/5 border border-amber-500/30 rounded-xl p-4">
