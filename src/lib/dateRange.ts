@@ -106,10 +106,10 @@ export function quarterCodeToRange(code: string): { from: string; to: string } {
   return { from: startOfQuarterISO(anchor), to: endOfQuarterISO(anchor) };
 }
 
-/** '2026-Q3' -> 'ไตรมาส 3 ปี 2026'. */
+/** '2026-Q3' -> 'Q3/2026'. */
 export function formatQuarterLabel(code: string): string {
   const [y, q] = code.split('-Q');
-  return `ไตรมาส ${q} ปี ${y}`;
+  return `Q${q}/${y}`;
 }
 
 /** Every quarter code from the quarter containing minDate through the one containing maxDate. */

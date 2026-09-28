@@ -7,7 +7,7 @@ import DataFreshness from '@/components/layout/DataFreshness';
 import { formatCurrency, formatNumber, formatPct, pctColor } from '@/lib/utils';
 import {
   todayISO, startOfQuarterISO, addDaysISO, isoToQuarterCode, quarterCodeToRange,
-  formatQuarterLabel, quarterCodesInRange, formatDateRangeThai,
+  formatQuarterLabel, formatDateRangeThai,
 } from '@/lib/dateRange';
 import { TIER_COLORS, TIER_LABELS } from '@/lib/constants';
 import type { TierSummary, TierKnown } from '@/lib/types';
@@ -20,6 +20,17 @@ function defaultQuarterCodes() {
   const baseQ = isoToQuarterCode(prevAnchor);
   return { baseQ, targetQ };
 }
+
+function parseQuarterCode(code: string): { year: number; quarter: number } {
+  const [y, q] = code.split('-Q');
+  return { year: Number(y), quarter: Number(q) };
+}
+
+function buildQuarterCode(year: number, quarter: number): string {
+  return `${year}-Q${quarter}`;
+}
+
+const QUARTERS = [1, 2, 3, 4];
 
 /** % change from `base` to `target`. Null when base is 0 and target isn't (undefined growth rate). */
 function pctOf(base: number, target: number): number | null {
@@ -190,9 +201,14 @@ function QuarterCompareContent() {
     </div>
   );
 
-  const quarterOptions = quarterCodesInRange(meta.minDate, meta.maxDate).reverse();
   const baseLabel = formatQuarterLabel(baseQ);
   const targetLabel = formatQuarterLabel(targetQ);
+  const baseParsed = parseQuarterCode(baseQ);
+  const targetParsed = parseQuarterCode(targetQ);
+  const minYear = Number(meta.minDate.slice(0, 4));
+  const maxYear = Number(meta.maxDate.slice(0, 4));
+  const years: number[] = [];
+  for (let y = maxYear; y >= minYear; y--) years.push(y);
 
   // Combined = dealer (net of returns) + online, matching the convention already
   // used on the Overview page's all-channel share bar.
@@ -225,31 +241,53 @@ function QuarterCompareContent() {
               {formatDateRangeThai(baseRange.from, baseRange.to)} เทียบกับ {formatDateRangeThai(targetRange.from, targetRange.to)}
             </p>
           </div>
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-end gap-3 flex-wrap">
             <div className="flex flex-col gap-1">
               <span className="text-xs text-gray-500">ไตรมาสฐาน</span>
-              <select
-                value={baseQ}
-                onChange={e => navigate(e.target.value, targetQ)}
-                className="appearance-none bg-[#1C1C1C] border border-[#3A3A3A] text-white text-xs rounded-lg pl-2 pr-6 py-1.5 cursor-pointer hover:border-[#F5C400] focus:outline-none focus:border-[#F5C400] transition-colors"
-              >
-                {quarterOptions.map(q => (
-                  <option key={q} value={q}>{formatQuarterLabel(q)}</option>
-                ))}
-              </select>
+              <div className="flex gap-1.5">
+                <select
+                  value={baseParsed.quarter}
+                  onChange={e => navigate(buildQuarterCode(baseParsed.year, Number(e.target.value)), targetQ)}
+                  className="appearance-none bg-[#1C1C1C] border border-[#3A3A3A] text-white text-xs font-semibold rounded-lg pl-2 pr-6 py-1.5 cursor-pointer hover:border-[#F5C400] focus:outline-none focus:border-[#F5C400] transition-colors"
+                >
+                  {QUARTERS.map(q => (
+                    <option key={q} value={q}>Q{q}</option>
+                  ))}
+                </select>
+                <select
+                  value={baseParsed.year}
+                  onChange={e => navigate(buildQuarterCode(Number(e.target.value), baseParsed.quarter), targetQ)}
+                  className="appearance-none bg-[#1C1C1C] border border-[#3A3A3A] text-white text-xs rounded-lg pl-2 pr-6 py-1.5 cursor-pointer hover:border-[#F5C400] focus:outline-none focus:border-[#F5C400] transition-colors"
+                >
+                  {years.map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <span className="text-gray-500 mt-4">vs</span>
+            <span className="text-gray-500 pb-2">vs</span>
             <div className="flex flex-col gap-1">
               <span className="text-xs text-gray-500">ไตรมาสเปรียบเทียบ</span>
-              <select
-                value={targetQ}
-                onChange={e => navigate(baseQ, e.target.value)}
-                className="appearance-none bg-[#1C1C1C] border border-[#3A3A3A] text-white text-xs rounded-lg pl-2 pr-6 py-1.5 cursor-pointer hover:border-[#F5C400] focus:outline-none focus:border-[#F5C400] transition-colors"
-              >
-                {quarterOptions.map(q => (
-                  <option key={q} value={q}>{formatQuarterLabel(q)}</option>
-                ))}
-              </select>
+              <div className="flex gap-1.5">
+                <select
+                  value={targetParsed.quarter}
+                  onChange={e => navigate(baseQ, buildQuarterCode(targetParsed.year, Number(e.target.value)))}
+                  className="appearance-none bg-[#1C1C1C] border border-[#3A3A3A] text-white text-xs font-semibold rounded-lg pl-2 pr-6 py-1.5 cursor-pointer hover:border-[#F5C400] focus:outline-none focus:border-[#F5C400] transition-colors"
+                >
+                  {QUARTERS.map(q => (
+                    <option key={q} value={q}>Q{q}</option>
+                  ))}
+                </select>
+                <select
+                  value={targetParsed.year}
+                  onChange={e => navigate(baseQ, buildQuarterCode(Number(e.target.value), targetParsed.quarter))}
+                  className="appearance-none bg-[#1C1C1C] border border-[#3A3A3A] text-white text-xs rounded-lg pl-2 pr-6 py-1.5 cursor-pointer hover:border-[#F5C400] focus:outline-none focus:border-[#F5C400] transition-colors"
+                >
+                  {years.map(y => (
+                    <option key={y} value={y}>{y}</option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>
