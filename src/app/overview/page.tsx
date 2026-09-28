@@ -65,6 +65,8 @@ function OverviewContent() {
   const allChannelSales = overviewNet.mtdSales + on.totalSales;
   const onlineShare = allChannelSales > 0 ? (on.totalSales / allChannelSales) * 100 : 0;
   const dealerShare = allChannelSales > 0 ? 100 - onlineShare : 0;
+  const allChannelOrders = overviewNet.invoiceCount + on.orderCount;
+  const allChannelAvgOrderValue = allChannelOrders > 0 ? allChannelSales / allChannelOrders : 0;
 
   return (
     <>
@@ -148,13 +150,23 @@ function OverviewContent() {
           )}
         </div>
 
-        {/* Row 1: 4 metrics */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {/* Row 1: 6 metrics */}
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
           <MetricCard
             title="ทำเป้าได้"
             value={ov.achievementPct !== null ? `${ov.achievementPct.toFixed(1)}%` : '-'}
             subtitle={ov.target ? `เป้า ${formatCurrencyShort(ov.target)}` : 'ไม่มีเป้า'}
             highlight={ov.achievementPct !== null && ov.achievementPct >= 100}
+          />
+          <MetricCard
+            title="จำนวนบิล (ดีลเลอร์)"
+            value={formatNumber(ov.invoiceCount) + ' บิล'}
+            subtitle="ในช่วงที่เลือก"
+          />
+          <MetricCard
+            title="บิลเฉลี่ย/ออเดอร์"
+            value={formatCurrency(ov.avgOrderValue)}
+            subtitle={`${formatNumber(ov.invoiceCount)} บิล`}
           />
           <MetricCard
             title="หน่วยทั้งหมด (ชิ้น)"
@@ -244,7 +256,7 @@ function OverviewContent() {
                     : 'ไม่มีรายการคืนสินค้า/เคลมในช่วงนี้'}
                 </p>
                 <p className="text-sm text-gray-500 mt-1 tabular-nums">
-                  {formatNumber(on.totalUnits)} ชิ้น · {formatNumber(on.orderCount)} ออเดอร์ · {formatNumber(on.buyerCount)} ผู้ซื้อ
+                  {formatNumber(on.totalUnits)} ชิ้น · {formatNumber(on.orderCount)} ออเดอร์ (เฉลี่ย {formatCurrency(on.avgOrderValue)}/ออเดอร์) · {formatNumber(on.buyerCount)} ผู้ซื้อ
                 </p>
               </div>
               <div className="text-right">
@@ -271,6 +283,9 @@ function OverviewContent() {
                 <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#F5C400]" />ดีลเลอร์ <span className="tabular-nums text-gray-300">{dealerShare.toFixed(1)}%</span></span>
                 <span className="inline-flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-[#38BDF8]" />ออนไลน์ <span className="tabular-nums text-gray-300">{onlineShare.toFixed(1)}%</span></span>
               </div>
+              <p className="mt-3 pt-3 border-t border-[#2A2F36] text-xs text-gray-500 tabular-nums">
+                รวมทุกช่องทาง {formatNumber(allChannelOrders)} ออเดอร์ (ดีลเลอร์ {formatNumber(overviewNet.invoiceCount)} บิล + ออนไลน์ {formatNumber(on.orderCount)} ออเดอร์) · เฉลี่ย {formatCurrency(allChannelAvgOrderValue)}/ออเดอร์
+              </p>
             </div>
           </div>
 

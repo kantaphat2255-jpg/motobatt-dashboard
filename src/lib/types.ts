@@ -57,6 +57,8 @@ export interface MonthlyOverviewData {
   mtdUnits: number;
   mtdCases: number;
   activeDealers: number;
+  invoiceCount: number;
+  avgOrderValue: number;
   momPct: number | null;
   prevMonthSales: number;
   projectedMonthEnd: number;
@@ -280,6 +282,7 @@ export interface OnlineSalesData {
   totalUnits: number;
   totalCases: number;
   orderCount: number;
+  avgOrderValue: number;
   buyerCount: number;
   prevSales: number;               // same dates one month earlier
   momPct: number | null;

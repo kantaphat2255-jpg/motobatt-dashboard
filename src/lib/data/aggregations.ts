@@ -62,6 +62,8 @@ export function aggregateMonthlyOverview(
   const mtdUnits = rangeRows.reduce((s, r) => s + r.QTY, 0);
   const mtdCases = rangeRows.reduce((s, r) => s + r.cases, 0);
   const activeDealers = new Set(rangeRows.map(r => r.CUSTOMER_ID)).size;
+  const invoiceCount = new Set(rangeRows.map(r => r.INV_NO)).size;
+  const avgOrderValue = invoiceCount > 0 ? mtdSales / invoiceCount : 0;
 
   // "Ongoing" = range sits inside a single month, runs up to the newest data,
   // and that month isn't over yet → project to month end (legacy MTD behaviour).
@@ -104,6 +106,7 @@ export function aggregateMonthlyOverview(
     fromDate: from, toDate: to,
     mtdSales, target, achievementPct,
     mtdUnits, mtdCases, activeDealers,
+    invoiceCount, avgOrderValue,
     momPct, prevMonthSales,
     projectedMonthEnd, requiredDailyOrGap,
     isOngoing, daysElapsed, daysTotal, daysRemaining,
@@ -513,13 +516,15 @@ export function aggregateOnlineSales(
   });
 
   const saleRows = inRange.filter(isSale);
+  const orderCount = new Set(saleRows.map(r => r.INV_NO)).size;
   return {
     fromDate: from, toDate: to,
     totalSales,
     returnAmount: sumReturns(inRange),
     totalUnits: inRange.reduce((s, r) => s + r.QTY, 0),
     totalCases: inRange.reduce((s, r) => s + r.cases, 0),
-    orderCount: new Set(saleRows.map(r => r.INV_NO)).size,
+    orderCount,
+    avgOrderValue: orderCount > 0 ? totalSales / orderCount : 0,
     buyerCount: new Set(saleRows.map(r => r.CUSTOMER_ID)).size,
     prevSales,
     momPct: prevSales > 0 ? ((totalSales - prevSales) / prevSales) * 100 : null,
