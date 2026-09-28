@@ -91,6 +91,39 @@ export function isoToYYYYMM(iso: string): string {
   return iso.slice(0, 4) + iso.slice(5, 7);
 }
 
+/** ISO date -> quarter code, e.g. '2026-08-15' -> '2026-Q3'. */
+export function isoToQuarterCode(iso: string): string {
+  const [y, m] = iso.split('-').map(Number);
+  const q = Math.floor((m - 1) / 3) + 1;
+  return `${y}-Q${q}`;
+}
+
+/** '2026-Q3' -> that quarter's ISO date boundaries. */
+export function quarterCodeToRange(code: string): { from: string; to: string } {
+  const [yStr, qStr] = code.split('-Q');
+  const anchorMonth = (Number(qStr) - 1) * 3 + 1;
+  const anchor = `${yStr}-${String(anchorMonth).padStart(2, '0')}-01`;
+  return { from: startOfQuarterISO(anchor), to: endOfQuarterISO(anchor) };
+}
+
+/** '2026-Q3' -> 'ไตรมาส 3 ปี 2026'. */
+export function formatQuarterLabel(code: string): string {
+  const [y, q] = code.split('-Q');
+  return `ไตรมาส ${q} ปี ${y}`;
+}
+
+/** Every quarter code from the quarter containing minDate through the one containing maxDate. */
+export function quarterCodesInRange(minDate: string, maxDate: string): string[] {
+  const codes: string[] = [];
+  let cursor = startOfQuarterISO(minDate);
+  const last = startOfQuarterISO(maxDate);
+  while (cursor <= last) {
+    codes.push(isoToQuarterCode(cursor));
+    cursor = addMonthsISO(cursor, 3);
+  }
+  return codes;
+}
+
 /** '202606' -> { from: '2026-06-01', to: '2026-06-30' } (for URL back-compat). */
 export function yyyymmToRange(yyyymm: string): { from: string; to: string } {
   const anchor = `${yyyymm.slice(0, 4)}-${yyyymm.slice(4, 6)}-01`;

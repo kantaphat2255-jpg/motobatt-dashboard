@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { BarChart2, Layers, Package, Users, TrendingUp, GitCompare, Star, RefreshCw, RotateCcw, Store, MapPin, Map, BatteryCharging } from 'lucide-react';
+import { BarChart2, Layers, Package, Users, TrendingUp, GitCompare, Star, RefreshCw, RotateCcw, Store, MapPin, Map, BatteryCharging, CalendarRange } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/overview', icon: BarChart2, label: 'ภาพรวมรายเดือน' },
@@ -19,6 +19,7 @@ const NAV_ITEMS = [
 
 const ANALYTICS_ITEMS = [
   { href: '/month-compare', icon: GitCompare, label: 'เปรียบเทียบรายเดือน' },
+  { href: '/quarter-compare', icon: CalendarRange, label: 'เปรียบเทียบไตรมาส' },
   { href: '/dealer-rfm', icon: Star, label: 'RFM ดีลเลอร์' },
   { href: '/purchase-cycle', icon: RefreshCw, label: 'รอบการสั่งซื้อ' },
   { href: '/returns', icon: RotateCcw, label: 'คืนสินค้า / เคลม' },

@@ -148,9 +148,12 @@ export function aggregateTierAnalysis(
 
   const tierOrder: Tier[] = ['A', 'B', 'C', 'D', 'Unknown'];
   const tiers: TierSummary[] = tierOrder
-    .filter(t => tierMap.has(t))
+    // A tier with sales in the compare period but none in the primary period must
+    // still show up (as a decline to zero) — filtering on tierMap alone would let
+    // it silently vanish instead of reporting the drop.
+    .filter(t => tierMap.has(t) || cmpTierMap.has(t))
     .map(t => {
-      const { sales, dealers } = tierMap.get(t)!;
+      const { sales, dealers } = tierMap.get(t) ?? { sales: 0, dealers: new Set<string>() };
       const dealerCount = dealers.size;
       const avgSalesPerDealer = dealerCount > 0 ? sales / dealerCount : 0;
       const cmp = cmpTierMap.get(t);
