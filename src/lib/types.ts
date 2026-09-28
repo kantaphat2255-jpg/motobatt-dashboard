@@ -73,6 +73,18 @@ export interface TierSummary {
   salesPct: number;
   dealerCount: number;
   avgSalesPerDealer: number;
+  prevSales: number;
+  salesMomPct: number | null;
+  prevDealerCount: number;
+  dealerCountMomPct: number | null;
+  avgPrevSalesPerDealer: number;
+  avgMomPct: number | null;
+}
+
+export interface UnknownTierDealer {
+  customerId: string;
+  customerName: string;
+  sales: number;
 }
 
 export interface OrderSizeRow {
@@ -87,6 +99,7 @@ export interface TierAnalysisData {
   tiers: TierSummary[];
   orderSizeDistribution: OrderSizeRow[];
   totalSales: number;
+  unknownDealers: UnknownTierDealer[];
 }
 
 export interface BillSizeRow {

@@ -6,8 +6,10 @@ import { useDashboard } from '@/hooks/useDashboard';
 import DataFreshness from '@/components/layout/DataFreshness';
 import WarningBanner from '@/components/ui/WarningBanner';
 import DateRangePicker from '@/components/ui/DateRangePicker';
+import TrendBadge from '@/components/ui/TrendBadge';
 import TierBarChart from '@/components/charts/TierBarChart';
 import { formatCurrency, formatNumber } from '@/lib/utils';
+import { formatDateRangeThai } from '@/lib/dateRange';
 import { TIER_COLORS, TIER_LABELS } from '@/lib/constants';
 import type { TierKnown } from '@/lib/types';
 import { Loader2, AlertCircle } from 'lucide-react';
@@ -17,7 +19,15 @@ function TierContent() {
   const router = useRouter();
   const from = searchParams.get('from') || searchParams.get('month') || undefined;
   const to = searchParams.get('to') || searchParams.get('month') || undefined;
-  const { data, loading, error, refresh } = useDashboard(from, to);
+  const cfrom = searchParams.get('cfrom');
+  const cto = searchParams.get('cto');
+  const { data, loading, error, refresh } = useDashboard(from, to, cfrom, cto);
+
+  const handleChange = (f: string, t: string, compare: { from: string; to: string } | null) => {
+    const p = new URLSearchParams({ from: f, to: t });
+    if (compare) { p.set('cfrom', compare.from); p.set('cto', compare.to); }
+    router.push(`/tier?${p.toString()}`);
+  };
 
   if (loading) return (
     <div className="flex items-center justify-center h-64">
@@ -32,9 +42,12 @@ function TierContent() {
     </div>
   );
 
-  const { tierAnalysis: ta, billSizeDistribution: bs, meta } = data;
+  const { tierAnalysis: ta, billSizeDistribution: bs, meta, compareRange } = data;
   const knownTiers = ta.tiers.filter(t => t.tier !== 'Unknown');
   const unknownTier = ta.tiers.find(t => t.tier === 'Unknown');
+  const compareLabel = compareRange
+    ? `เทียบ ${formatDateRangeThai(compareRange.from, compareRange.to)}`
+    : 'เทียบเดือนก่อน';
 
   return (
     <>
@@ -42,12 +55,21 @@ function TierContent() {
       <div className="p-6 space-y-6">
         <div className="flex items-center justify-between">
           <h1 className="text-xl font-bold">วิเคราะห์ระดับชั้น (Tier)</h1>
-          <DateRangePicker minDate={meta.minDate} maxDate={meta.maxDate} from={meta.rangeFrom} to={meta.rangeTo} onChange={(f, t) => router.push(`/tier?from=${f}&to=${t}`)} />
+          <DateRangePicker
+            minDate={meta.minDate}
+            maxDate={meta.maxDate}
+            from={meta.rangeFrom}
+            to={meta.rangeTo}
+            compareFrom={compareRange?.from ?? null}
+            compareTo={compareRange?.to ?? null}
+            onChange={handleChange}
+          />
         </div>
 
         <WarningBanner count={meta.tierJoinFailCount} ids={meta.tierJoinFailIds} />
 
         {/* Tier Cards */}
+        <p className="text-xs text-gray-500">{compareLabel}</p>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           {knownTiers.map(t => (
             <div
@@ -58,16 +80,25 @@ function TierContent() {
               <p className="text-xs text-gray-400 mb-2 uppercase tracking-wide" style={{ color: TIER_COLORS[t.tier] }}>
                 {TIER_LABELS[t.tier]}
               </p>
-              <p className="text-xl font-bold tabular-nums">{formatCurrency(t.sales)}</p>
+              <div className="flex items-baseline gap-2">
+                <p className="text-xl font-bold tabular-nums">{formatCurrency(t.sales)}</p>
+                <TrendBadge pct={t.salesMomPct} />
+              </div>
               <p className="text-sm text-gray-400 mt-1 tabular-nums">{t.salesPct.toFixed(1)}% ของยอดรวม</p>
               <div className="mt-3 pt-3 border-t border-[#2A2A2A] grid grid-cols-2 gap-2 text-xs">
                 <div>
                   <p className="text-gray-500">ดีลเลอร์</p>
-                  <p className="text-white font-semibold tabular-nums">{t.dealerCount} ราย</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-white font-semibold tabular-nums">{t.dealerCount} ราย</p>
+                    <TrendBadge pct={t.dealerCountMomPct} />
+                  </div>
                 </div>
                 <div>
                   <p className="text-gray-500">เฉลี่ย/ราย</p>
-                  <p className="text-white font-semibold tabular-nums">{formatCurrency(t.avgSalesPerDealer)}</p>
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-white font-semibold tabular-nums">{formatCurrency(t.avgSalesPerDealer)}</p>
+                    <TrendBadge pct={t.avgMomPct} />
+                  </div>
                 </div>
               </div>
             </div>
@@ -75,14 +106,41 @@ function TierContent() {
         </div>
 
         {unknownTier && (
-          <div className="bg-amber-500/5 border border-amber-500/30 rounded-xl p-4 flex items-center gap-4">
-            <div>
-              <p className="text-xs text-amber-400 mb-1">ไม่ระบุเทียร์</p>
-              <p className="text-lg font-bold tabular-nums">{formatCurrency(unknownTier.sales)}</p>
+          <div className="bg-amber-500/5 border border-amber-500/30 rounded-xl p-4">
+            <div className="flex items-center gap-4">
+              <div>
+                <p className="text-xs text-amber-400 mb-1">ไม่ระบุเทียร์</p>
+                <p className="text-lg font-bold tabular-nums">{formatCurrency(unknownTier.sales)}</p>
+              </div>
+              <div className="text-sm text-gray-400">
+                {unknownTier.dealerCount} ราย — {unknownTier.salesPct.toFixed(1)}% ของยอดรวม
+              </div>
             </div>
-            <div className="text-sm text-gray-400">
-              {unknownTier.dealerCount} ราย — {unknownTier.salesPct.toFixed(1)}% ของยอดรวม
-            </div>
+            {ta.unknownDealers.length > 0 && (
+              <div className="mt-3 pt-3 border-t border-amber-500/20">
+                <p className="text-xs text-gray-400 mb-2">รายชื่อร้านที่ยังไม่ระบุเทียร์ในช่วงนี้:</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-gray-500 text-xs">
+                        <th className="text-left py-1 pr-4 font-medium">รหัส</th>
+                        <th className="text-left py-1 pr-4 font-medium">ชื่อร้าน</th>
+                        <th className="text-right py-1 pl-4 font-medium">ยอดขาย</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ta.unknownDealers.map(d => (
+                        <tr key={d.customerId} className="border-t border-amber-500/10">
+                          <td className="py-1.5 pr-4 text-gray-400 tabular-nums text-xs whitespace-nowrap">{d.customerId}</td>
+                          <td className="py-1.5 pr-4 text-white whitespace-nowrap">{d.customerName || '—'}</td>
+                          <td className="py-1.5 pl-4 text-right text-gray-300 tabular-nums">{formatCurrency(d.sales)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

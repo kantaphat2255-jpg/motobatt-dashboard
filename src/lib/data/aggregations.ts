@@ -113,7 +113,9 @@ export function aggregateMonthlyOverview(
 export function aggregateTierAnalysis(
   rows: NormalizedRow[],
   from: string,
-  to: string
+  to: string,
+  compareFrom?: string,
+  compareTo?: string,
 ): TierAnalysisData {
   const monthRows = rows.filter(r => r.INV_DATE >= from && r.INV_DATE <= to);
   const totalSales = monthRows.reduce((s, r) => s + r.NET_AMOUNT, 0);
@@ -126,17 +128,44 @@ export function aggregateTierAnalysis(
     t.dealers.add(r.CUSTOMER_ID);
   }
 
+  // Comparison period: an explicit range from the date picker when the user turned
+  // "เปรียบเทียบ" on, otherwise the same dates one calendar month earlier by default
+  // (mirrors aggregateMonthlyOverview's momPct), so every tier card always has a delta.
+  const cmpFrom = compareFrom ?? addMonthsPreserveDay(from, -1);
+  const cmpTo = compareTo ?? addMonthsPreserveDay(to, -1);
+  const cmpRows = rows.filter(r => r.INV_DATE >= cmpFrom && r.INV_DATE <= cmpTo);
+  const cmpTierMap = new Map<Tier, { sales: number; dealers: Set<string> }>();
+  for (const r of cmpRows) {
+    if (!cmpTierMap.has(r.Tier)) cmpTierMap.set(r.Tier, { sales: 0, dealers: new Set() });
+    const t = cmpTierMap.get(r.Tier)!;
+    t.sales += r.NET_AMOUNT;
+    t.dealers.add(r.CUSTOMER_ID);
+  }
+  const pct = (cur: number, prev: number) => (prev > 0 ? ((cur - prev) / prev) * 100 : null);
+
   const tierOrder: Tier[] = ['A', 'B', 'C', 'D', 'Unknown'];
   const tiers: TierSummary[] = tierOrder
     .filter(t => tierMap.has(t))
     .map(t => {
       const { sales, dealers } = tierMap.get(t)!;
+      const dealerCount = dealers.size;
+      const avgSalesPerDealer = dealerCount > 0 ? sales / dealerCount : 0;
+      const cmp = cmpTierMap.get(t);
+      const prevSales = cmp?.sales ?? 0;
+      const prevDealerCount = cmp?.dealers.size ?? 0;
+      const avgPrevSalesPerDealer = prevDealerCount > 0 ? prevSales / prevDealerCount : 0;
       return {
         tier: t,
         sales,
         salesPct: totalSales > 0 ? (sales / totalSales) * 100 : 0,
-        dealerCount: dealers.size,
-        avgSalesPerDealer: dealers.size > 0 ? sales / dealers.size : 0,
+        dealerCount,
+        avgSalesPerDealer,
+        prevSales,
+        salesMomPct: pct(sales, prevSales),
+        prevDealerCount,
+        dealerCountMomPct: pct(dealerCount, prevDealerCount),
+        avgPrevSalesPerDealer,
+        avgMomPct: pct(avgSalesPerDealer, avgPrevSalesPerDealer),
       };
     });
 
@@ -183,7 +212,19 @@ export function aggregateTierAnalysis(
     return { ...range, counts, pcts };
   });
 
-  return { tiers, orderSizeDistribution, totalSales };
+  // Named dealers currently bucketed as "Unknown" tier in this range — lets the
+  // page tell the user exactly which stores need a tier assigned, not just a count.
+  const unknownMap = new Map<string, { customerName: string; sales: number }>();
+  for (const r of monthRows) {
+    if (r.Tier !== 'Unknown') continue;
+    if (!unknownMap.has(r.CUSTOMER_ID)) unknownMap.set(r.CUSTOMER_ID, { customerName: r.CUSTOMER_NAME, sales: 0 });
+    unknownMap.get(r.CUSTOMER_ID)!.sales += r.NET_AMOUNT;
+  }
+  const unknownDealers = Array.from(unknownMap.entries())
+    .map(([customerId, v]) => ({ customerId, customerName: v.customerName, sales: v.sales }))
+    .sort((a, b) => b.sales - a.sales);
+
+  return { tiers, orderSizeDistribution, totalSales, unknownDealers };
 }
 
 // Invoice-value ("bill size") distribution — how big a typical order is in ฿,

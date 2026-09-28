@@ -101,7 +101,7 @@ export async function GET(req: NextRequest) {
       online: aggregateOnlineSales(onlineNetRows, from, to),
       onlineCompare: hasCompare ? aggregateOnlineSales(onlineNetRows, cfrom!, cto!) : null,
       compareRange: hasCompare ? { from: cfrom!, to: cto! } : null,
-      tierAnalysis: aggregateTierAnalysis(normalizedRows, from, to),
+      tierAnalysis: aggregateTierAnalysis(normalizedRows, from, to, cfrom ?? undefined, cto ?? undefined),
       billSizeDistribution: aggregateBillSizeDistribution(normalizedRows, from, to),
       skuBreakdown: aggregateSkuBreakdown(normalizedRows, from, to),
       batteryTypes: aggregateBatteryTypes(normalizedRows, from, to, { dealerRows: normalizedNetRows, onlineRows: onlineNetRows }),
